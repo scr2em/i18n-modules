@@ -216,3 +216,6 @@ pnpm test        # Vitest
 pnpm typecheck   # TypeScript
 pnpm build       # compiles src to dist
 ```
+
+`dist` is in git, so an install from GitHub needs no build step. Run
+`pnpm build` and commit `dist` with every change to `src`.
