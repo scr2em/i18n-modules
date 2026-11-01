@@ -7,7 +7,6 @@ import {
 	I18nProvider,
 	registerI18nModule,
 	setLanguage,
-	translate,
 	useI18n,
 } from './index.ts'
 
@@ -115,14 +114,5 @@ describe('I18nProvider', () => {
 
 		expect(screen.getByText('Tardif')).toBeInTheDocument()
 		expect(screen.queryByText('Late')).not.toBeInTheDocument()
-	})
-
-	it('does not change translate, which uses the language of the app', () => {
-		render(
-			<I18nProvider language="fr">
-				<Title testId="inside" />
-			</I18nProvider>,
-		)
-		expect(translate(messages, 'title')).toBe('Title')
 	})
 })

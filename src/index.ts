@@ -48,10 +48,7 @@ export function useI18n<Tree extends Messages>(source: I18nMessages<Tree>) {
 		translator = (key, values) => format(module, language, key, values)
 		module.translators.set(language, translator)
 	}
-	const t = translator as <Key extends MessageKey<Tree>>(
-		key: Key,
-		...values: ValuesFor<Tree, Key>
-	) => string
+	const t = translator as TranslateFunction<I18nMessages<Tree>>
 	return { t, language }
 }
 
@@ -85,7 +82,7 @@ export function Trans<Tree extends Messages>(
 	return createElement(
 		Fragment,
 		null,
-		...renderNodes(nodes, props.components ?? {}, values),
+		...renderNodes(nodes, props.components ?? {}, values, language),
 	)
 }
 
@@ -134,15 +131,55 @@ export function I18nProvider({
 	return createElement(LanguageContext.Provider, { value: language }, children)
 }
 
-/** Reads a string outside React (Yup messages, utils), in the language of the
- *  app. `I18nProvider` has no effect on it. */
-export function translate<Tree extends Messages, Key extends MessageKey<Tree>>(
-	source: I18nMessages<Tree>,
-	key: Key,
-	...values: ValuesFor<Tree, Key>
-): string {
-	return format(moduleOf(source), state.language, key, values[0])
+/**
+ * Values that every string can use, such as display names that come from the
+ * settings of a customer. A `{{name}}` with a default value does not need a
+ * value in `t()`, but can still get one. Components re-render with the new
+ * values.
+ *
+ * Declare the names once, so the type check knows them:
+ *
+ *   declare module '@scr2em/i18n-modules' {
+ *     interface DefaultValues {
+ *       staffDisplayName: string
+ *     }
+ *   }
+ *
+ *   setDefaultValues({ staffDisplayName: settings.staffDisplayName })
+ */
+// oxlint-disable-next-line typescript/no-empty-interface -- filled by module augmentation
+export interface DefaultValues {}
+
+export function setDefaultValues(values: {
+	[Name in keyof DefaultValues]?: InterpolationValue
+}): void {
+	defaultValues = { ...values }
+	setState({ language: state.language })
 }
+
+/**
+ * The type of the `t` that `useI18n(messages)` returns. A helper that is not
+ * a component (a schema, a list of columns) takes it as a parameter, so the
+ * component that calls the helper reads the strings with the hook and
+ * re-renders when the language changes. There is no way to read strings
+ * outside a hook.
+ *
+ *   // schema.ts
+ *   import messages from './schema.i18n.json'
+ *   export const useSchemaTranslation = () => useI18n(messages).t
+ *   export const getSchema = (t: TranslateFunction<typeof messages>) => …
+ *
+ *   // Form.tsx
+ *   const tSchema = useSchemaTranslation()
+ *   const schema = getSchema(tSchema)
+ */
+export type TranslateFunction<Source> =
+	Source extends I18nMessages<infer Tree>
+		? <Key extends MessageKey<Tree>>(
+				key: Key,
+				...values: ValuesFor<Tree, Key>
+			) => string
+		: never
 
 export function getLanguage(): string {
 	return state.language
@@ -193,8 +230,7 @@ export function registerI18nModule<const Tree extends Messages>(
 /**
  * The type of a `.i18n.json` import, from its `.i18n.d.json.ts` file. `Tree`
  * is the text of the default language. At runtime the import is not the JSON,
- * so this type has no properties to read: give it to `useI18n`, `translate`
- * or `<Trans>`.
+ * so this type has no properties to read: give it to `useI18n` or `<Trans>`.
  */
 export type I18nMessages<Tree extends Messages> = {
 	readonly [MESSAGES_TREE]: Tree
@@ -202,7 +238,10 @@ export type I18nMessages<Tree extends Messages> = {
 
 export type Messages = { readonly [key: string]: string | Messages }
 
-type InterpolationValues = Record<string, string | number>
+/** `null` and `undefined` render as an empty string. */
+type InterpolationValue = string | number | null | undefined
+
+type InterpolationValues = Record<string, InterpolationValue>
 
 type LanguageLoader = () => Promise<{ default: Messages }>
 
@@ -247,10 +286,11 @@ type Trim<Text extends string> = Text extends ` ${infer Rest}`
 		? Trim<Rest>
 		: Text
 
-/** The names in `{{name}}` in `Text`. */
+/** The names in `{{name}}` (or `{{name, format}}`) in `Text`. */
 type PlaceholderNames<Text extends string> =
-	Text extends `${string}{{${infer Name}}}${infer Rest}`
-		? Trim<Name> | PlaceholderNames<Rest>
+	Text extends `${string}{{${infer Placeholder}}}${infer Rest}`
+		? Trim<Placeholder extends `${infer Name},${string}` ? Name : Placeholder>
+			| PlaceholderNames<Rest>
 		: never
 
 /** The names of the opening and self-closing tags in `Text`: `link` for
@@ -279,30 +319,44 @@ type TextOf<Tree, Key extends string> = Key extends `${infer Head}.${infer Rest}
 				: never
 		}[keyof Tree & string]
 
-/** The values that the text of `Key` needs: one for each `{{name}}`, and
- *  `count` for a plural key. */
+/** The names that the text of `Key` needs a value for: each `{{name}}` with
+ *  no default value, and `count` for a plural key. */
+type RequiredNames<Tree, Key extends string> = Exclude<
+	| PlaceholderNames<TextOf<Tree, Key>>
+	| (Key extends PluralKey<Tree> ? 'count' : never),
+	keyof DefaultValues
+>
+
+/** The names in the text that have a default value. */
+type OptionalNames<Tree, Key extends string> = Extract<
+	PlaceholderNames<TextOf<Tree, Key>>,
+	keyof DefaultValues
+>
+
 type ValuesObject<Tree, Key extends string> = {
-	[Name in
-		| PlaceholderNames<TextOf<Tree, Key>>
-		| (Key extends PluralKey<Tree> ? 'count' : never)]: Name extends 'count'
+	[Name in RequiredNames<Tree, Key>]: Name extends 'count'
 		? number
-		: string | number
-}
+		: InterpolationValue
+} & { [Name in OptionalNames<Tree, Key>]?: InterpolationValue }
 
 /** The values that `t(key, …)` takes. Without the text of the strings (when
  *  the import is typed as plain JSON), any values are allowed. */
 type ValuesFor<Tree, Key extends string> =
 	string extends TextOf<Tree, Key>
 		? [values?: InterpolationValues]
-		: [keyof ValuesObject<Tree, Key>] extends [never]
-			? []
+		: [RequiredNames<Tree, Key>] extends [never]
+			? [OptionalNames<Tree, Key>] extends [never]
+				? []
+				: [values?: ValuesObject<Tree, Key>]
 			: [values: ValuesObject<Tree, Key>]
 
 type ValuesProp<Tree, Key extends string> =
 	string extends TextOf<Tree, Key>
 		? { values?: InterpolationValues }
-		: [keyof ValuesObject<Tree, Key>] extends [never]
-			? { values?: never }
+		: [RequiredNames<Tree, Key>] extends [never]
+			? [OptionalNames<Tree, Key>] extends [never]
+				? { values?: never }
+				: { values?: ValuesObject<Tree, Key> }
 			: { values: ValuesObject<Tree, Key> }
 
 type ComponentsProp<Tree, Key extends string> =
@@ -329,6 +383,7 @@ const LanguageContext = createContext<string | undefined>(undefined)
 const listeners = new Set<() => void>()
 // Replaced on every change, so `useSyncExternalStore` sees a new snapshot.
 let state = { language: 'en' }
+let defaultValues: InterpolationValues = {}
 let requestedLanguage = state.language
 
 function subscribe(listener: () => void) {
@@ -459,7 +514,7 @@ function format(
 	key: string,
 	values?: InterpolationValues,
 ): string {
-	return interpolate(templateOf(module, language, key, values), values)
+	return interpolate(templateOf(module, language, key, values), values, language)
 }
 
 /** The string of `key`, before the values go in. */
@@ -479,12 +534,29 @@ function templateOf(
 	return key
 }
 
-function interpolate(text: string, values?: InterpolationValues): string {
-	if (!values) {
-		return text
-	}
-	return text.replace(/\{\{\s*(\w+)\s*\}\}/g, (placeholder, name: string) =>
-		name in values ? String(values[name]) : placeholder,
+/** `{{name}}`, or `{{name, number}}` with a format. */
+const PLACEHOLDER = /\{\{\s*(\w+)\s*(?:,\s*(\w+)\s*)?\}\}/g
+
+function interpolate(
+	text: string,
+	values: InterpolationValues | undefined,
+	language: string,
+): string {
+	const allValues = { ...defaultValues, ...values }
+	return text.replace(
+		PLACEHOLDER,
+		(placeholder, name: string, formatName: string | undefined) => {
+			if (!(name in allValues)) {
+				return placeholder
+			}
+			const value = allValues[name]
+			if (value === null || value === undefined) {
+				return ''
+			}
+			return formatName === 'number' && typeof value === 'number'
+				? new Intl.NumberFormat(language).format(value)
+				: String(value)
+		},
 	)
 }
 
@@ -551,13 +623,14 @@ function parseTags(template: string): TagNode[] {
 function renderNodes(
 	nodes: TagNode[],
 	components: Record<string, ReactElement>,
-	values?: InterpolationValues,
+	values: InterpolationValues | undefined,
+	language: string,
 ): ReactNode[] {
 	return nodes.map((node) => {
 		if (node.kind === 'text') {
-			return interpolate(node.text, values)
+			return interpolate(node.text, values, language)
 		}
-		const children = renderNodes(node.children, components, values)
+		const children = renderNodes(node.children, components, values, language)
 		const component = Object.hasOwn(components, node.name)
 			? components[node.name]
 			: undefined

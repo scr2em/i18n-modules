@@ -7,9 +7,9 @@ import {
 	getLanguage,
 	registerI18nModule,
 	setLanguage,
-	translate,
 	useI18n,
 } from './index.ts'
+import { tFor } from './testUtils.ts'
 
 // What `import messages from './Greeting.i18n.json'` gives, made by hand: the
 // test runs the runtime without the Vite plugin.
@@ -179,16 +179,16 @@ describe('plurals', () => {
 	)
 
 	it('uses the zero form when the file has it', () => {
-		expect(translate(pluralMessages, 'files', { count: 0 })).toBe('No files')
-		expect(translate(pluralMessages, 'files', { count: 1 })).toBe('1 file')
-		expect(translate(pluralMessages, 'files', { count: 5 })).toBe('5 files')
+		expect(tFor(pluralMessages)('files', { count: 0 })).toBe('No files')
+		expect(tFor(pluralMessages)('files', { count: 1 })).toBe('1 file')
+		expect(tFor(pluralMessages)('files', { count: 5 })).toBe('5 files')
 	})
 
 	it('uses every plural form of the language', async () => {
 		await setLanguage('ar')
 		expect(
 			[0, 1, 2, 3, 11, 100].map((count) =>
-				translate(pluralMessages, 'files', { count }),
+				tFor(pluralMessages)('files', { count }),
 			),
 		).toEqual([
 			'لا ملفات',
@@ -204,7 +204,7 @@ describe('plurals', () => {
 		await setLanguage('ru')
 		expect(
 			[0, 1, 3, 5].map((count) =>
-				translate(pluralMessages, 'files', { count }),
+				tFor(pluralMessages)('files', { count }),
 			),
 		).toEqual(['0 файлов', '1 файл', '3 файла', '5 файлов'])
 	})
@@ -225,34 +225,34 @@ describe('language tags', () => {
 
 	it('falls back from the regional language to its language, then to the default language', async () => {
 		await setLanguage('pt-BR')
-		expect(translate(tagMessages, 'color')).toBe('Cor (BR)')
-		expect(translate(tagMessages, 'title')).toBe('Título')
-		expect(translate(tagMessages, 'size')).toBe('Size')
+		expect(tFor(tagMessages)('color')).toBe('Cor (BR)')
+		expect(tFor(tagMessages)('title')).toBe('Título')
+		expect(tFor(tagMessages)('size')).toBe('Size')
 	})
 
 	it('writes a tag in its canonical form', async () => {
 		await setLanguage('pt-br')
 		expect(getLanguage()).toBe('pt-BR')
-		expect(translate(tagMessages, 'color')).toBe('Cor (BR)')
+		expect(tFor(tagMessages)('color')).toBe('Cor (BR)')
 	})
 
 	it('uses the strings of a less specific tag with a script', async () => {
 		await setLanguage('zh-Hant-TW')
-		expect(translate(tagMessages, 'title')).toBe('標題')
+		expect(tFor(tagMessages)('title')).toBe('標題')
 	})
 
 	it('uses the default language for a regional tag of it', async () => {
 		await setLanguage('en-US')
-		expect(translate(tagMessages, 'title')).toBe('Title')
+		expect(tFor(tagMessages)('title')).toBe('Title')
 	})
 })
 
-describe('translate', () => {
-	it('reads a string outside React in the current language', async () => {
-		expect(translate(messages, 'items', { count: 1 })).toBe('1 item')
+describe('the language of the app', () => {
+	it('is the language of every useI18n', async () => {
+		expect(tFor(messages)('items', { count: 1 })).toBe('1 item')
 		await setLanguage('fr-CA')
 		expect(getLanguage()).toBe('fr-CA')
-		expect(translate(messages, 'items', { count: 1 })).toBe('1 élément')
+		expect(tFor(messages)('items', { count: 1 })).toBe('1 élément')
 	})
 
 	it('loads a language once', async () => {

@@ -2,16 +2,17 @@ import { I18nProvider, Trans, useI18n } from '@scr2em/i18n-modules'
 import { Suspense } from 'react'
 
 import messages from './App.i18n.json'
-import { greetingFor } from './greeting.ts'
+import { greetingFor, useGreetingTranslation } from './greeting.ts'
 import { Inbox } from './Inbox.tsx'
 import { LanguagePicker } from './LanguagePicker.tsx'
 
 export function App() {
 	const { t } = useI18n(messages)
+	const tGreeting = useGreetingTranslation()
 	return (
 		<main>
 			<h1>{t('title')}</h1>
-			<p>{greetingFor(new Date().getHours())}</p>
+			<p>{greetingFor(tGreeting, new Date().getHours())}</p>
 			<LanguagePicker />
 			<Inbox />
 			<h2>{t('preview')}</h2>

@@ -134,9 +134,9 @@ Add the plugin and its rules to `.oxlintrc.json`:
 
 | Rule                 | What it checks                                                                                                         |
 | -------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| `static-keys`        | The key given to `t()` or `translate()` is a string literal, so tools can find every key.                              |
+| `static-keys`        | The key given to `t()` or `<Trans i18nKey>` is a string literal, so tools can find every key.                          |
 | `colocated-messages` | `Name.tsx` imports only `./Name.i18n.json`. Its tests and stories can import it too. A dynamic import or a re-export of a `.i18n.json` file is reported. |
-| `no-messages-access` | The imported strings go only to `useI18n()` or `translate()`. At runtime the import is not the JSON, so `messages.en` is `undefined`. |
+| `no-messages-access` | The imported strings go only to `useI18n()`, `<Trans messages>` or `typeof` in a type. At runtime the import is not the JSON, so `messages.en` is `undefined`. |
 
 ## 4. Write a component
 
@@ -336,28 +336,81 @@ export function EmailPreview({ readerLanguage }: { readerLanguage: string }) {
   while its strings load. Its own `<Suspense>` keeps the rest of the page on
   the screen. To keep the old text on the screen while the new strings load,
   change `language` in `startTransition`.
-- `translate()` works outside React, so it always uses the language of the
-  app.
 
-### Read strings outside React
+### Strings in helpers (schemas, columns, options)
 
-Use `translate` in utils or validation messages. It uses the current
-language.
+Strings are read only with the hook, so every component that shows text
+re-renders when the language changes. There is no function that reads a
+string outside a hook.
+
+A helper that is not a component keeps its strings in its own file and takes
+the `t` of those strings as a parameter. The file exports a hook that gives
+that `t`, and the component that calls the helper uses it:
 
 ```ts
-import { translate } from '@scr2em/i18n-modules'
+// signUpSchema.ts
+import { type TranslateFunction, useI18n } from '@scr2em/i18n-modules'
+import { z } from 'zod'
 
-import messages from './validation.i18n.json'
+import messages from './signUpSchema.i18n.json'
 
-export const requiredMessage = () => translate(messages, 'required')
+export const useSignUpSchemaTranslation = () => useI18n(messages).t
+
+export const getSignUpSchema = (t: TranslateFunction<typeof messages>) =>
+	z.object({ email: z.email(t('invalidEmail')) })
 ```
+
+```tsx
+// SignUpForm.tsx
+import { getSignUpSchema, useSignUpSchemaTranslation } from './signUpSchema.ts'
+
+export function SignUpForm() {
+	const tSchema = useSignUpSchemaTranslation()
+	const schema = getSignUpSchema(tSchema)
+	// …
+}
+```
+
+- `TranslateFunction<typeof messages>` types the keys and the values of the
+  helper's own strings.
+- The `t` of a different file has different keys, so the type check fails
+  when a component passes its own `t` to the helper.
+- In a test, a function such as `(key: string) => key` can stand in for `t`.
+
+### Default values
+
+Values that every string can use, such as display names from the settings of
+a customer, are set once with `setDefaultValues`. Declare their names, so a
+`{{name}}` with a default value does not need a value in `t()`:
+
+```ts
+import { setDefaultValues } from '@scr2em/i18n-modules'
+
+declare module '@scr2em/i18n-modules' {
+	interface DefaultValues {
+		staffDisplayName: string
+	}
+}
+
+setDefaultValues({ staffDisplayName: settings.staffDisplayName ?? 'Staff' })
+```
+
+Every component that uses `useI18n` re-renders with the new values. A value
+in `t()` wins over the default value.
+
+### Values and formats
+
+- A value can be a string, a number, `null` or `undefined`. `null` and
+  `undefined` render as an empty string.
+- `{{count, number}}` formats a number for the current language:
+  `1234567` is `1,234,567` in English and `1.234.567` in German.
 
 ## Example project
 
 `example/` is a small Vite + React app that uses the package. It has
 components with their own `.i18n.json` files, a language picker (English,
 French, Arabic), plurals, `<Trans>`, a French preview with `<I18nProvider>`,
-and `translate` outside React.
+and a helper that takes the `t` of its own strings.
 
 ```sh
 pnpm install

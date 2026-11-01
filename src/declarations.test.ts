@@ -121,10 +121,12 @@ describe('the type check with a declaration file', () => {
 		writeFileSync(
 			join(folder, 'Page.ts'),
 			[
-				"import { translate } from '@scr2em/i18n-modules'",
+				"import { useI18n } from '@scr2em/i18n-modules'",
 				"import messages from './Page.i18n.json'",
-				"translate(messages, 'greeting', { name: 'Ada' })",
-				"translate(messages, 'greeting', { nmae: 'Ada' })",
+				'export function usePage() {',
+				'\tconst { t } = useI18n(messages)',
+				"\treturn [t('greeting', { name: 'Ada' }), t('greeting', { nmae: 'Ada' })]",
+				'}',
 				'',
 			].join('\n'),
 		)
@@ -150,10 +152,10 @@ describe('the type check with a declaration file', () => {
 
 		const output = typeCheck(folder)
 
-		// Only the wrong name fails, on line 4.
-		expect(output).toMatch(/Page\.ts\(4,/)
+		// Only the wrong name fails, in the second call on line 5.
 		expect(output).toContain("'nmae' does not exist")
-		expect(output).not.toMatch(/Page\.ts\(3,/)
+		expect(output.match(/error TS/g)).toHaveLength(1)
+		expect(output).toMatch(/Page\.ts\(5,/)
 	})
 })
 

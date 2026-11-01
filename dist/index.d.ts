@@ -86,9 +86,44 @@ export declare function I18nProvider({ language, children, }: {
     language: string;
     children?: ReactNode;
 }): ReactNode;
-/** Reads a string outside React (Yup messages, utils), in the language of the
- *  app. `I18nProvider` has no effect on it. */
-export declare function translate<Tree extends Messages, Key extends MessageKey<Tree>>(source: I18nMessages<Tree>, key: Key, ...values: ValuesFor<Tree, Key>): string;
+/**
+ * Values that every string can use, such as display names that come from the
+ * settings of a customer. A `{{name}}` with a default value does not need a
+ * value in `t()`, but can still get one. Components re-render with the new
+ * values.
+ *
+ * Declare the names once, so the type check knows them:
+ *
+ *   declare module '@scr2em/i18n-modules' {
+ *     interface DefaultValues {
+ *       staffDisplayName: string
+ *     }
+ *   }
+ *
+ *   setDefaultValues({ staffDisplayName: settings.staffDisplayName })
+ */
+export interface DefaultValues {
+}
+export declare function setDefaultValues(values: {
+    [Name in keyof DefaultValues]?: InterpolationValue;
+}): void;
+/**
+ * The type of the `t` that `useI18n(messages)` returns. A helper that is not
+ * a component (a schema, a list of columns) takes it as a parameter, so the
+ * component that calls the helper reads the strings with the hook and
+ * re-renders when the language changes. There is no way to read strings
+ * outside a hook.
+ *
+ *   // schema.ts
+ *   import messages from './schema.i18n.json'
+ *   export const useSchemaTranslation = () => useI18n(messages).t
+ *   export const getSchema = (t: TranslateFunction<typeof messages>) => …
+ *
+ *   // Form.tsx
+ *   const tSchema = useSchemaTranslation()
+ *   const schema = getSchema(tSchema)
+ */
+export type TranslateFunction<Source> = Source extends I18nMessages<infer Tree> ? <Key extends MessageKey<Tree>>(key: Key, ...values: ValuesFor<Tree, Key>) => string : never;
 export declare function getLanguage(): string;
 /**
  * Loads the strings of every imported module for `language`, then switches
@@ -101,8 +136,7 @@ export declare function registerI18nModule<const Tree extends Messages>(namespac
 /**
  * The type of a `.i18n.json` import, from its `.i18n.d.json.ts` file. `Tree`
  * is the text of the default language. At runtime the import is not the JSON,
- * so this type has no properties to read: give it to `useI18n`, `translate`
- * or `<Trans>`.
+ * so this type has no properties to read: give it to `useI18n` or `<Trans>`.
  */
 export type I18nMessages<Tree extends Messages> = {
     readonly [MESSAGES_TREE]: Tree;
@@ -110,7 +144,9 @@ export type I18nMessages<Tree extends Messages> = {
 export type Messages = {
     readonly [key: string]: string | Messages;
 };
-type InterpolationValues = Record<string, string | number>;
+/** `null` and `undefined` render as an empty string. */
+type InterpolationValue = string | number | null | undefined;
+type InterpolationValues = Record<string, InterpolationValue>;
 type LanguageLoader = () => Promise<{
     default: Messages;
 }>;
@@ -123,8 +159,8 @@ type PluralKey<Tree> = {
     [Key in keyof Tree & string]: Tree[Key] extends string ? Key extends `${infer Base}_${PluralSuffix}` ? Base : never : `${Key}.${PluralKey<Tree[Key]>}`;
 }[keyof Tree & string];
 type Trim<Text extends string> = Text extends ` ${infer Rest}` ? Trim<Rest> : Text extends `${infer Rest} ` ? Trim<Rest> : Text;
-/** The names in `{{name}}` in `Text`. */
-type PlaceholderNames<Text extends string> = Text extends `${string}{{${infer Name}}}${infer Rest}` ? Trim<Name> | PlaceholderNames<Rest> : never;
+/** The names in `{{name}}` (or `{{name, format}}`) in `Text`. */
+type PlaceholderNames<Text extends string> = Text extends `${string}{{${infer Placeholder}}}${infer Rest}` ? Trim<Placeholder extends `${infer Name},${string}` ? Name : Placeholder> | PlaceholderNames<Rest> : never;
 /** The names of the opening and self-closing tags in `Text`: `link` for
  *  `<link>…</link>`, `br` for `<br/>`. */
 type TagNames<Text extends string> = Text extends `${string}<${infer Tag}>${infer Rest}` ? TagName<Tag> | TagNames<Rest> : never;
@@ -133,18 +169,25 @@ type TagName<Tag extends string> = Tag extends `/${string}` | ` ${string}` ? nev
 type TextOf<Tree, Key extends string> = Key extends `${infer Head}.${infer Rest}` ? Head extends keyof Tree ? TextOf<Tree[Head], Rest> : never : {
     [Name in keyof Tree & string]: WithoutPluralSuffix<Name> extends Key ? Tree[Name] extends string ? Tree[Name] : never : never;
 }[keyof Tree & string];
-/** The values that the text of `Key` needs: one for each `{{name}}`, and
- *  `count` for a plural key. */
+/** The names that the text of `Key` needs a value for: each `{{name}}` with
+ *  no default value, and `count` for a plural key. */
+type RequiredNames<Tree, Key extends string> = Exclude<PlaceholderNames<TextOf<Tree, Key>> | (Key extends PluralKey<Tree> ? 'count' : never), keyof DefaultValues>;
+/** The names in the text that have a default value. */
+type OptionalNames<Tree, Key extends string> = Extract<PlaceholderNames<TextOf<Tree, Key>>, keyof DefaultValues>;
 type ValuesObject<Tree, Key extends string> = {
-    [Name in PlaceholderNames<TextOf<Tree, Key>> | (Key extends PluralKey<Tree> ? 'count' : never)]: Name extends 'count' ? number : string | number;
+    [Name in RequiredNames<Tree, Key>]: Name extends 'count' ? number : InterpolationValue;
+} & {
+    [Name in OptionalNames<Tree, Key>]?: InterpolationValue;
 };
 /** The values that `t(key, …)` takes. Without the text of the strings (when
  *  the import is typed as plain JSON), any values are allowed. */
-type ValuesFor<Tree, Key extends string> = string extends TextOf<Tree, Key> ? [values?: InterpolationValues] : [keyof ValuesObject<Tree, Key>] extends [never] ? [] : [values: ValuesObject<Tree, Key>];
+type ValuesFor<Tree, Key extends string> = string extends TextOf<Tree, Key> ? [values?: InterpolationValues] : [RequiredNames<Tree, Key>] extends [never] ? [OptionalNames<Tree, Key>] extends [never] ? [] : [values?: ValuesObject<Tree, Key>] : [values: ValuesObject<Tree, Key>];
 type ValuesProp<Tree, Key extends string> = string extends TextOf<Tree, Key> ? {
     values?: InterpolationValues;
-} : [keyof ValuesObject<Tree, Key>] extends [never] ? {
+} : [RequiredNames<Tree, Key>] extends [never] ? [OptionalNames<Tree, Key>] extends [never] ? {
     values?: never;
+} : {
+    values?: ValuesObject<Tree, Key>;
 } : {
     values: ValuesObject<Tree, Key>;
 };

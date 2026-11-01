@@ -4,8 +4,8 @@ import { join } from 'node:path'
 /**
  * Writes `Page.i18n.d.json.ts` next to `Page.i18n.json`. TypeScript reads it
  * in place of the JSON (with `allowArbitraryExtensions`), so the type of the
- * import has the exact text of each string. `useI18n`, `translate` and
- * `<Trans>` read the `{{values}}` and the tags from that text.
+ * import has the exact text of each string. `useI18n` and `<Trans>` read the
+ * `{{values}}` and the tags from that text.
  */
 
 export type Messages = { [key: string]: string | Messages }

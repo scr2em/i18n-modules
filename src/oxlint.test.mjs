@@ -10,7 +10,7 @@ const ruleTester = new RuleTester({
 	languageOptions: { parserOptions: { lang: 'tsx' } },
 })
 
-const imports = `import { Trans, translate, useI18n } from '@scr2em/i18n-modules'
+const imports = `import { Trans, type TranslateFunction, useI18n } from '@scr2em/i18n-modules'
 import messages from './Page.i18n.json'
 `
 
@@ -18,7 +18,6 @@ ruleTester.run('static-keys', plugin.rules['static-keys'], {
 	valid: [
 		`${imports}const { t } = useI18n(messages); t('title'); t(\`title\`)`,
 		`${imports}const { t: translatePage } = useI18n(messages); translatePage('items', { count })`,
-		`${imports}translate(messages, 'title')`,
 		`${imports}const page = <Trans messages={messages} i18nKey="terms" />`,
 		`${imports}const page = <Trans messages={messages} i18nKey={'terms'} />`,
 		// Another component named `Trans` is not checked.
@@ -39,7 +38,6 @@ ruleTester.run('static-keys', plugin.rules['static-keys'], {
 			code: `${imports}function Page() { return t(labels[kind]) }\nconst { t } = useI18n(messages)`,
 			errors: [/string literal/],
 		},
-		{ code: `${imports}translate(messages, key)`, errors: [/string literal/] },
 		{
 			code: `${imports}const page = <Trans messages={messages} i18nKey={key} />`,
 			errors: [/string literal/],
@@ -112,7 +110,8 @@ ruleTester.run('colocated-messages', plugin.rules['colocated-messages'], {
 
 ruleTester.run('no-messages-access', plugin.rules['no-messages-access'], {
 	valid: [
-		`${imports}const { t } = useI18n(messages); translate(messages, 'title')`,
+		`${imports}const { t } = useI18n(messages)`,
+		`${imports}const getSchema = (t: TranslateFunction<typeof messages>) => t('title')`,
 		`${imports}const page = { messages: 1 }; page.messages`,
 		`${imports}const page = <Trans messages={messages} i18nKey="terms" />`,
 	],

@@ -8,7 +8,7 @@
  *     "i18n-modules/no-messages-access": "error"
  *   }
  *
- * - `static-keys`: the key given to `t()` (from `useI18n`), `translate()` or
+ * - `static-keys`: the key given to `t()` (from `useI18n`) or
  *   `<Trans i18nKey>` is a string literal, so tools can find every key.
  * - `colocated-messages`: a file imports only its own strings, `Name.i18n.json`
  *   next to `Name.tsx`, as with CSS Modules. Tests and stories
@@ -17,7 +17,7 @@
  *   because it lets other files read the strings. The Vite plugin also fails
  *   the build for an import from a different file.
  * - `no-messages-access`: the imported strings go only to `useI18n`,
- *   `translate` or `<Trans messages>`. At runtime the import is not the JSON, so `messages.en.title`
+ *   `<Trans messages>`, or to `typeof` in a type. At runtime the import is not the JSON, so `messages.en.title`
  *   is `undefined`.
  */
 
@@ -38,10 +38,9 @@ function isI18nJsonImport(node) {
 	)
 }
 
-/** The local names of `useI18n`, `translate` and `Trans` imported from the
- *  package. */
+/** The local names of `useI18n` and `Trans` imported from the package. */
 function packageImports(program) {
-	const names = { useI18n: new Set(), translate: new Set(), Trans: new Set() }
+	const names = { useI18n: new Set(), Trans: new Set() }
 	for (const statement of program.body) {
 		if (
 			statement.type !== 'ImportDeclaration' ||
@@ -81,7 +80,7 @@ function isTransElement(element, imports) {
 const staticKeys = {
 	meta: { type: 'problem' },
 	create(context) {
-		let imports = { useI18n: new Set(), translate: new Set(), Trans: new Set() }
+		let imports = { useI18n: new Set(), Trans: new Set() }
 		const translateFunctions = new Set()
 		const calls = []
 		const report = (node) =>
@@ -128,10 +127,8 @@ const staticKeys = {
 			'Program:exit'() {
 				for (const call of calls) {
 					const name = calleeName(call)
-					if (translateFunctions.has(name)) {
-						if (!isStringLiteral(call.arguments[0])) report(call)
-					} else if (imports.translate.has(name)) {
-						if (!isStringLiteral(call.arguments[1])) report(call)
+					if (translateFunctions.has(name) && !isStringLiteral(call.arguments[0])) {
+						report(call)
 					}
 				}
 			},
@@ -196,7 +193,7 @@ const colocatedMessages = {
 const noMessagesAccess = {
 	meta: { type: 'problem' },
 	create(context) {
-		let imports = { useI18n: new Set(), translate: new Set(), Trans: new Set() }
+		let imports = { useI18n: new Set(), Trans: new Set() }
 		const messageNames = new Set()
 		return {
 			Program(node) {
@@ -232,18 +229,25 @@ const noMessagesAccess = {
 				const isI18nArgument =
 					parent.type === 'CallExpression' &&
 					parent.arguments[0] === node &&
-					(imports.useI18n.has(calleeName(parent)) ||
-						imports.translate.has(calleeName(parent)))
+					imports.useI18n.has(calleeName(parent))
+				// `TranslateFunction<typeof messages>` is only a type.
+				const isTypeQuery = parent.type === 'TSTypeQuery'
 				const isTransMessages =
 					parent.type === 'JSXExpressionContainer' &&
 					parent.parent?.type === 'JSXAttribute' &&
 					parent.parent.name.name === 'messages' &&
 					isTransElement(parent.parent.parent, imports)
-				if (isDeclaration || isPropertyName || isI18nArgument || isTransMessages)
+				if (
+					isDeclaration ||
+					isPropertyName ||
+					isI18nArgument ||
+					isTransMessages ||
+					isTypeQuery
+				)
 					return
 				context.report({
 					node,
-					message: `Give '${node.name}' only to useI18n(), translate() or <Trans messages>. At runtime it is not the JSON of the file.`,
+					message: `Give '${node.name}' only to useI18n() or <Trans messages>. At runtime it is not the JSON of the file.`,
 				})
 			},
 		}

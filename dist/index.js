@@ -65,7 +65,7 @@ export function Trans(props) {
     const { module, language } = useModule(props.messages);
     const values = 'values' in props ? props.values : undefined;
     const nodes = parseTags(templateOf(module, language, props.i18nKey, values));
-    return createElement(Fragment, null, ...renderNodes(nodes, props.components ?? {}, values));
+    return createElement(Fragment, null, ...renderNodes(nodes, props.components ?? {}, values, language));
 }
 /**
  * Sets the language of a subtree. Components inside it use `language`, and
@@ -84,10 +84,9 @@ export function Trans(props) {
 export function I18nProvider({ language, children, }) {
     return createElement(LanguageContext.Provider, { value: language }, children);
 }
-/** Reads a string outside React (Yup messages, utils), in the language of the
- *  app. `I18nProvider` has no effect on it. */
-export function translate(source, key, ...values) {
-    return format(moduleOf(source), state.language, key, values[0]);
+export function setDefaultValues(values) {
+    defaultValues = { ...values };
+    setState({ language: state.language });
 }
 export function getLanguage() {
     return state.language;
@@ -130,6 +129,7 @@ const LanguageContext = createContext(undefined);
 const listeners = new Set();
 // Replaced on every change, so `useSyncExternalStore` sees a new snapshot.
 let state = { language: 'en' };
+let defaultValues = {};
 let requestedLanguage = state.language;
 function subscribe(listener) {
     listeners.add(listener);
@@ -226,7 +226,7 @@ function useModule(source) {
     return { module, language };
 }
 function format(module, language, key, values) {
-    return interpolate(templateOf(module, language, key, values), values);
+    return interpolate(templateOf(module, language, key, values), values, language);
 }
 /** The string of `key`, before the values go in. */
 function templateOf(module, language, key, values) {
@@ -239,11 +239,22 @@ function templateOf(module, language, key, values) {
     }
     return key;
 }
-function interpolate(text, values) {
-    if (!values) {
-        return text;
-    }
-    return text.replace(/\{\{\s*(\w+)\s*\}\}/g, (placeholder, name) => name in values ? String(values[name]) : placeholder);
+/** `{{name}}`, or `{{name, number}}` with a format. */
+const PLACEHOLDER = /\{\{\s*(\w+)\s*(?:,\s*(\w+)\s*)?\}\}/g;
+function interpolate(text, values, language) {
+    const allValues = { ...defaultValues, ...values };
+    return text.replace(PLACEHOLDER, (placeholder, name, formatName) => {
+        if (!(name in allValues)) {
+            return placeholder;
+        }
+        const value = allValues[name];
+        if (value === null || value === undefined) {
+            return '';
+        }
+        return formatName === 'number' && typeof value === 'number'
+            ? new Intl.NumberFormat(language).format(value)
+            : String(value);
+    });
 }
 // Names can be numbers (`<0>…</0>`), as with an array of components.
 const TAG = /<(\/?)([A-Za-z0-9][\w-]*)\s*(\/?)>/g;
@@ -291,12 +302,12 @@ function parseTags(template) {
     }
     return root.children;
 }
-function renderNodes(nodes, components, values) {
+function renderNodes(nodes, components, values, language) {
     return nodes.map((node) => {
         if (node.kind === 'text') {
-            return interpolate(node.text, values);
+            return interpolate(node.text, values, language);
         }
-        const children = renderNodes(node.children, components, values);
+        const children = renderNodes(node.children, components, values, language);
         const component = Object.hasOwn(components, node.name)
             ? components[node.name]
             : undefined;
