@@ -66,7 +66,8 @@ To use the same text in a different file, put it in that file's own
 ### Default language
 
 The default language is `en`. To use a different one, give
-`i18nModules({ defaultLanguage: 'fr' })`.
+`i18nModules({ defaultLanguage: 'fr' })`. It can also have a region, such as
+`'en-US'`.
 
 ### Typed keys and values
 
@@ -194,7 +195,32 @@ export function Inbox({ name }: { name: string }) {
   current language. `_zero` is used for a count of 0 only when the file has
   it.
 - A plural key needs `count`. `t('unread')` fails the type check.
-- When a language does not have a key, the default language is used.
+- When a language does not have a key, the less specific language is used,
+  then the default language. See [Language tags](#language-tags).
+
+### Language tags
+
+The keys of a `.i18n.json` file are BCP 47 tags with an ISO 639 language:
+`en`, `fr`, `pt-BR` (ISO 3166 region), `zh-Hant-TW` (ISO 15924 script and a
+region).
+
+- The build fails for a key that is not a tag, such as `english`, and for a
+  tag that is not in its canonical form, such as `pt-br`. The error gives the
+  canonical form: `"pt-br" must be written "pt-BR"`.
+- A key that a language does not have falls back to the less specific tags,
+  then to the default language: `pt-BR` → `pt` → `en`.
+- So a regional language needs only the strings that are different. When the
+  file has `pt`, `pt-BR` can leave out keys. With no `pt` in the file,
+  `pt-BR` needs every key, as any other language does.
+- `setLanguage('pt-br')` and `<I18nProvider language="pt-br">` use `pt-BR`.
+
+```json
+{
+	"en": { "title": "Settings", "color": "Color" },
+	"pt": { "title": "Configurações", "color": "Cor" },
+	"pt-BR": { "color": "Cor do tema" }
+}
+```
 
 ### Change the language
 

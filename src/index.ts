@@ -30,8 +30,9 @@ import {
  *   rules of the current language (`Intl.PluralRules`). `items_zero` is used
  *   for a count of 0 when the file has it. A plural key needs `count`: the
  *   type check fails without it.
- * - A key that the current language does not have falls back to the default
- *   language.
+ * - Languages are BCP 47 tags: `en`, `fr`, `pt-BR`, `zh-Hant-TW`. A key that
+ *   the current language does not have falls back to the less specific tags
+ *   (`pt-BR`, then `pt`), then to the default language.
  *
  * The default language is in the importer's chunk, so its strings show on the
  * first render. Other languages load in their own chunks. `setLanguage` loads
@@ -142,7 +143,8 @@ export function getLanguage(): string {
  * Loads the strings of every imported module for `language`, then switches
  * to it. Components re-render once, with all strings in the new language.
  */
-export async function setLanguage(language: string): Promise<void> {
+export async function setLanguage(requested: string): Promise<void> {
+	const language = canonicalTag(requested)
 	requestedLanguage = language
 	await Promise.all(
 		[...modules.values()].flatMap(
@@ -349,36 +351,68 @@ function moduleOf(source: unknown): I18nModule {
 	)
 }
 
-/** The loader for `language`, or for its base language (`fr` for `fr-CA`). */
-function loaderOf(module: I18nModule, language: string) {
-	return (
-		module.loaders.get(language) ?? module.loaders.get(language.split('-')[0])
+/** `pt-br` → `pt-BR`. A tag that is not valid stays as it is. */
+function canonicalTag(language: string): string {
+	try {
+		return Intl.getCanonicalLocales(language)[0] ?? language
+	} catch {
+		return language
+	}
+}
+
+/** `language` and its less specific tags: `zh-Hant-TW`, `zh-Hant`, `zh`. */
+function fallbackTags(language: string): string[] {
+	const subtags = language.split('-')
+	return subtags.map((_subtag, index) =>
+		subtags.slice(0, subtags.length - index).join('-'),
 	)
 }
 
-/** Starts loading `language` if it is not loaded yet. Returns nothing when
- *  its strings are ready, so a render can go on with no wait. */
+/** The tags of `module` to read for `language`, most specific first, and
+ *  then the default language. */
+function tagsToRead(module: I18nModule, language: string): string[] {
+	return [
+		...fallbackTags(language).filter(
+			(tag) => tag !== module.defaultLanguage && module.loaders.has(tag),
+		),
+		module.defaultLanguage,
+	]
+}
+
+/** Starts loading the strings that `language` reads (its own and those of
+ *  its less specific tags). Returns nothing when they are ready, so a render
+ *  can go on with no wait. */
 function pendingLoad(
 	module: I18nModule,
 	language: string,
 ): Promise<void> | undefined {
-	const loader = loaderOf(module, language)
-	if (!loader || module.languages.has(language)) {
-		return undefined
-	}
-	let loading = module.loading.get(language)
+	const loads = tagsToRead(module, language).flatMap((tag) => {
+		const loader = module.loaders.get(tag)
+		return loader && !module.languages.has(tag)
+			? [loadTag(module, tag, loader)]
+			: []
+	})
+	return loads.length > 0 ? Promise.all(loads).then(() => undefined) : undefined
+}
+
+function loadTag(
+	module: I18nModule,
+	tag: string,
+	loader: LanguageLoader,
+): Promise<void> {
+	let loading = module.loading.get(tag)
 	if (!loading) {
 		loading = loader().then(
 			(loaded) => {
-				module.languages.set(language, loaded.default)
+				module.languages.set(tag, loaded.default)
 			},
 			(error: unknown) => {
 				// Lets a later render try again.
-				module.loading.delete(language)
+				module.loading.delete(tag)
 				throw error
 			},
 		)
-		module.loading.set(language, loading)
+		module.loading.set(tag, loading)
 	}
 	return loading
 }
@@ -388,7 +422,11 @@ function pendingLoad(
  *  load. */
 function useModule(source: unknown) {
 	const current = useSyncExternalStore(subscribe, getState)
-	const language = useContext(LanguageContext) ?? current.language
+	const providerLanguage = useContext(LanguageContext)
+	const language =
+		providerLanguage === undefined
+			? current.language
+			: canonicalTag(providerLanguage)
 	const module = moduleOf(source)
 	const pending = pendingLoad(module, language)
 	if (pending) {
@@ -416,16 +454,14 @@ function templateOf(
 	key: string,
 	values?: InterpolationValues,
 ): string {
-	return (
-		find(module.languages.get(language), language, key, values) ??
-		find(
-			module.languages.get(module.defaultLanguage),
-			module.defaultLanguage,
-			key,
-			values,
-		) ??
-		key
-	)
+	for (const tag of tagsToRead(module, language)) {
+		// The plural rules of the language of the text pick its plural form.
+		const text = find(module.languages.get(tag), tag, key, values)
+		if (text !== undefined) {
+			return text
+		}
+	}
+	return key
 }
 
 function interpolate(text: string, values?: InterpolationValues): string {

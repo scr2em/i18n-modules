@@ -33,7 +33,11 @@ import {
  *   of the default language. With `allowArbitraryExtensions` in
  *   `tsconfig.json`, TypeScript reads it, so `t()` autocompletes the
  *   `{{values}}` of each string and `<Trans>` checks its tags.
- * - Every language must have the same keys as the default language. A missing
+ * - The languages are BCP 47 tags, such as `en`, `fr` or `pt-BR`, written in
+ *   their canonical form (`pt-BR`, not `pt-br`).
+ * - Every language must have the same keys as the default language. A
+ *   regional language can leave out keys when the file has its less specific
+ *   language: `pt-BR` falls back to `pt`. A missing
  *   or extra key fails the dev server (error overlay) and the build. Plural
  *   forms (`_one`, `_other`, …) can differ, because languages have different
  *   plural rules.
@@ -226,6 +230,15 @@ export function findKeyProblems(
 	languages: Record<string, Messages>,
 	defaultLanguage: string,
 ): string[] {
+	const tagProblems = [defaultLanguage, ...Object.keys(languages)].flatMap(
+		(language) => {
+			const problem = languageTagProblem(language)
+			return problem ? [problem] : []
+		},
+	)
+	if (tagProblems.length > 0) {
+		return [...new Set(tagProblems)]
+	}
 	const defaultMessages = languages[defaultLanguage]
 	if (!defaultMessages) {
 		return [`  the default language "${defaultLanguage}" is missing`]
@@ -235,9 +248,13 @@ export function findKeyProblems(
 		.filter(([language]) => language !== defaultLanguage)
 		.flatMap(([language, messages]) => {
 			const actual = keyPaths(messages)
+			// `pt-BR` can leave out keys when the file has `pt`.
+			const hasFallback = lessSpecificTags(language).some(
+				(tag) => tag !== defaultLanguage && tag in languages,
+			)
 			return [
 				...[...expected]
-					.filter((path) => !actual.has(path))
+					.filter((path) => !hasFallback && !actual.has(path))
 					.map((path) => `  "${language}" is missing "${path}"`),
 				...[...actual]
 					.filter((path) => !expected.has(path))
@@ -247,4 +264,33 @@ export function findKeyProblems(
 					),
 			]
 		})
+}
+
+/** Why `language` is not a canonical BCP 47 tag with an ISO 639 language,
+ *  or nothing when it is. */
+function languageTagProblem(language: string): string | undefined {
+	const notATag = `  "${language}" is not a language tag. Use a BCP 47 tag with an ISO 639 language, such as "en", "fr" or "pt-BR".`
+	let canonical: string | undefined
+	try {
+		canonical = Intl.getCanonicalLocales(language)[0]
+	} catch {
+		return notATag
+	}
+	// BCP 47 also allows 5 to 8 letters (`english`), but ISO 639 codes have
+	// 2 or 3 letters.
+	if (!canonical || !/^[a-z]{2,3}(?:-|$)/.test(canonical)) {
+		return notATag
+	}
+	return canonical === language
+		? undefined
+		: `  "${language}" must be written "${canonical}"`
+}
+
+/** The less specific tags of `language`: `zh-Hant` and `zh` for
+ *  `zh-Hant-TW`. */
+function lessSpecificTags(language: string): string[] {
+	const subtags = language.split('-')
+	return subtags
+		.slice(1)
+		.map((_subtag, index) => subtags.slice(0, subtags.length - 1 - index).join('-'))
 }

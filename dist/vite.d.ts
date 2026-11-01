@@ -22,7 +22,11 @@ import { type Messages } from './declarations.ts';
  *   of the default language. With `allowArbitraryExtensions` in
  *   `tsconfig.json`, TypeScript reads it, so `t()` autocompletes the
  *   `{{values}}` of each string and `<Trans>` checks its tags.
- * - Every language must have the same keys as the default language. A missing
+ * - The languages are BCP 47 tags, such as `en`, `fr` or `pt-BR`, written in
+ *   their canonical form (`pt-BR`, not `pt-br`).
+ * - Every language must have the same keys as the default language. A
+ *   regional language can leave out keys when the file has its less specific
+ *   language: `pt-BR` falls back to `pt`. A missing
  *   or extra key fails the dev server (error overlay) and the build. Plural
  *   forms (`_one`, `_other`, …) can differ, because languages have different
  *   plural rules.

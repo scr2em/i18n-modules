@@ -55,6 +55,54 @@ describe('findKeyProblems', () => {
 		).toEqual([])
 	})
 
+	it('accepts BCP 47 tags with a region or a script', () => {
+		expect(
+			findKeyProblems(
+				{
+					en: { title: 'Title' },
+					'pt-BR': { title: 'Título' },
+					'zh-Hant-TW': { title: '標題' },
+				},
+				'en',
+			),
+		).toEqual([])
+	})
+
+	it('names a key that is not a language tag, or not in its canonical form', () => {
+		expect(
+			findKeyProblems(
+				{ en: { title: 'Title' }, english: { title: 'Title' } },
+				'en',
+			),
+		).toEqual([
+			'  "english" is not a language tag. Use a BCP 47 tag with an ISO 639 language, such as "en", "fr" or "pt-BR".',
+		])
+		expect(
+			findKeyProblems({ en: { title: 'Title' }, 'pt-br': { title: 'Título' } }, 'en'),
+		).toEqual(['  "pt-br" must be written "pt-BR"'])
+	})
+
+	it('lets a regional language leave out the keys of its less specific language', () => {
+		const languages = {
+			en: { title: 'Title', color: 'Color' },
+			pt: { title: 'Título', color: 'Cor' },
+			'pt-BR': { color: 'Cor (BR)' },
+		}
+		expect(findKeyProblems(languages, 'en')).toEqual([])
+		expect(
+			findKeyProblems({ ...languages, 'pt-BR': { extra: 'Extra' } }, 'en'),
+		).toEqual(['  "pt-BR" has "extra", which "en" does not have'])
+	})
+
+	it('needs every key in a regional language with no less specific language', () => {
+		expect(
+			findKeyProblems(
+				{ en: { title: 'Title', color: 'Color' }, 'pt-BR': { color: 'Cor' } },
+				'en',
+			),
+		).toEqual(['  "pt-BR" is missing "title"'])
+	})
+
 	it('needs the default language', () => {
 		expect(findKeyProblems({ fr: { title: 'Titre' } }, 'en')).toEqual([
 			'  the default language "en" is missing',

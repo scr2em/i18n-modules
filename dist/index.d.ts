@@ -19,8 +19,9 @@ import { type ReactElement, type ReactNode } from 'react';
  *   rules of the current language (`Intl.PluralRules`). `items_zero` is used
  *   for a count of 0 when the file has it. A plural key needs `count`: the
  *   type check fails without it.
- * - A key that the current language does not have falls back to the default
- *   language.
+ * - Languages are BCP 47 tags: `en`, `fr`, `pt-BR`, `zh-Hant-TW`. A key that
+ *   the current language does not have falls back to the less specific tags
+ *   (`pt-BR`, then `pt`), then to the default language.
  *
  * The default language is in the importer's chunk, so its strings show on the
  * first render. Other languages load in their own chunks. `setLanguage` loads
@@ -92,7 +93,7 @@ export declare function getLanguage(): string;
  * Loads the strings of every imported module for `language`, then switches
  * to it. Components re-render once, with all strings in the new language.
  */
-export declare function setLanguage(language: string): Promise<void>;
+export declare function setLanguage(requested: string): Promise<void>;
 /** Called by the code that the Vite plugin makes from a `.i18n.json` file.
  *  Tests can call it to make strings without the plugin. */
 export declare function registerI18nModule<const Tree extends Messages>(namespace: string, defaultLanguage: string, defaultMessages: Tree, loaders: Record<string, LanguageLoader>): I18nMessages<Tree>;

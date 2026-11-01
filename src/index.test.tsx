@@ -193,6 +193,43 @@ describe('plurals', () => {
 	})
 })
 
+describe('language tags', () => {
+	const tagMessages = registerI18nModule(
+		'test/Tags.i18n',
+		'en',
+		{ title: 'Title', color: 'Color', size: 'Size' },
+		{
+			pt: () =>
+				Promise.resolve({ default: { title: 'Título', color: 'Cor' } }),
+			'pt-BR': () => Promise.resolve({ default: { color: 'Cor (BR)' } }),
+			'zh-Hant': () => Promise.resolve({ default: { title: '標題' } }),
+		},
+	)
+
+	it('falls back from the regional language to its language, then to the default language', async () => {
+		await setLanguage('pt-BR')
+		expect(translate(tagMessages, 'color')).toBe('Cor (BR)')
+		expect(translate(tagMessages, 'title')).toBe('Título')
+		expect(translate(tagMessages, 'size')).toBe('Size')
+	})
+
+	it('writes a tag in its canonical form', async () => {
+		await setLanguage('pt-br')
+		expect(getLanguage()).toBe('pt-BR')
+		expect(translate(tagMessages, 'color')).toBe('Cor (BR)')
+	})
+
+	it('uses the strings of a less specific tag with a script', async () => {
+		await setLanguage('zh-Hant-TW')
+		expect(translate(tagMessages, 'title')).toBe('標題')
+	})
+
+	it('uses the default language for a regional tag of it', async () => {
+		await setLanguage('en-US')
+		expect(translate(tagMessages, 'title')).toBe('Title')
+	})
+})
+
 describe('translate', () => {
 	it('reads a string outside React in the current language', async () => {
 		expect(translate(messages, 'items', { count: 1 })).toBe('1 item')
