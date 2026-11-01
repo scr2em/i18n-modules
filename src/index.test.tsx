@@ -127,6 +127,23 @@ describe('useI18n', () => {
 	})
 })
 
+describe('the t function', () => {
+	it('is the same on every render, and changes with the language', async () => {
+		const seen: unknown[] = []
+		function Recorder() {
+			const { t } = useI18n(messages)
+			seen.push(t)
+			return null
+		}
+		const { rerender } = render(<Recorder />)
+		rerender(<Recorder />)
+		expect(seen[0]).toBe(seen[1])
+
+		await act(() => setLanguage('fr'))
+		expect(seen.at(-1)).not.toBe(seen[0])
+	})
+})
+
 describe('plurals', () => {
 	const pluralMessages = registerI18nModule(
 		'test/Plurals.i18n',

@@ -11,6 +11,7 @@ const english = {
 	greeting: 'Hello <bold>{{name}}</bold>',
 	unknown: 'A <script>tag</script> and a <b>stray close</bold>.',
 	unclosed: 'Start <bold>never closed',
+	numbered: '<0>{{count}}</0> of <1>{{total}}</1>',
 	files_one: '<bold>{{count}}</bold> file',
 	files_other: '<bold>{{count}}</bold> files',
 } as const
@@ -87,6 +88,18 @@ describe('Trans', () => {
 		expect(container.textContent).toBe('Start <bold>never closed')
 	})
 
+	it('renders numbered tags', () => {
+		const { container } = render(
+			<Trans
+				messages={messages}
+				i18nKey="numbered"
+				values={{ count: 2, total: 5 }}
+				components={{ 0: <strong />, 1: <em /> }}
+			/>,
+		)
+		expect(container.innerHTML).toBe('<strong>2</strong> of <em>5</em>')
+	})
+
 	it('picks the plural form from count', () => {
 		const { container } = render(
 			<Trans
@@ -126,6 +139,8 @@ describe('Trans', () => {
 					/>
 					{/* @ts-expect-error -- the text has a <link> tag */}
 					<Trans messages={messages} i18nKey="terms" components={{}} />
+					{/* @ts-expect-error -- the text has <0> and <1> tags */}
+					<Trans messages={messages} i18nKey="numbered" values={{ count: 1, total: 2 }} components={{ 0: <b /> }} />
 					{/* @ts-expect-error -- the text has <bold> and <link> tags */}
 					<Trans messages={messages} i18nKey="nested" components={{ bold: <strong /> }} />
 				</>

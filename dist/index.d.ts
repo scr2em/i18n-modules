@@ -45,6 +45,7 @@ export declare function useI18n<Tree extends Messages>(source: I18nMessages<Tree
  * - The text between `<link>` and `</link>` becomes the children of the
  *   `link` element. Tags can be inside other tags.
  * - `<br/>` renders the element with no children.
+ * - Tag names can be numbers: `<0>…</0>` uses `components={{ 0: <b /> }}`.
  * - A tag that is not in `components` shows as plain text. No HTML from a
  *   string is ever rendered.
  * - Tags are read before `{{values}}` go in, so a value never becomes a tag.

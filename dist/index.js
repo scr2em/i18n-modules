@@ -29,7 +29,15 @@ import { cloneElement, createContext, createElement, Fragment, use, useContext, 
  */
 export function useI18n(source) {
     const { module, language } = useModule(source);
-    const t = (key, ...values) => format(module, language, key, values[0]);
+    // The same `t` for the same file and language, so it is safe in the
+    // dependencies of effects and memos, and the React Compiler can keep its
+    // memoized values.
+    let translator = module.translators.get(language);
+    if (!translator) {
+        translator = (key, values) => format(module, language, key, values);
+        module.translators.set(language, translator);
+    }
+    const t = translator;
     return { t, language };
 }
 /**
@@ -46,6 +54,7 @@ export function useI18n(source) {
  * - The text between `<link>` and `</link>` becomes the children of the
  *   `link` element. Tags can be inside other tags.
  * - `<br/>` renders the element with no children.
+ * - Tag names can be numbers: `<0>…</0>` uses `components={{ 0: <b /> }}`.
  * - A tag that is not in `components` shows as plain text. No HTML from a
  *   string is ever rendered.
  * - Tags are read before `{{values}}` go in, so a value never becomes a tag.
@@ -105,6 +114,7 @@ export function registerI18nModule(namespace, defaultLanguage, defaultMessages, 
         loaders: new Map(Object.entries(loaders)),
         languages: new Map([[defaultLanguage, defaultMessages]]),
         loading: new Map(),
+        translators: new Map(),
     });
     if (isHotUpdate) {
         setState({ language: state.language });
@@ -235,7 +245,8 @@ function interpolate(text, values) {
     }
     return text.replace(/\{\{\s*(\w+)\s*\}\}/g, (placeholder, name) => name in values ? String(values[name]) : placeholder);
 }
-const TAG = /<(\/?)([A-Za-z][\w-]*)\s*(\/?)>/g;
+// Names can be numbers (`<0>…</0>`), as with an array of components.
+const TAG = /<(\/?)([A-Za-z0-9][\w-]*)\s*(\/?)>/g;
 /** Splits a string into text and tags. A closing tag with no matching opening
  *  tag stays text, and so does an opening tag that is never closed. */
 function parseTags(template) {
