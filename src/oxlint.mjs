@@ -8,12 +8,12 @@
  *     "i18n-modules/no-messages-access": "error"
  *   }
  *
- * - `static-keys`: the key given to `t()` (from `useI18n`) or `translate()` is
- *   a string literal, so tools can find every key.
+ * - `static-keys`: the key given to `t()` (from `useI18n`), `translate()` or
+ *   `<Trans i18nKey>` is a string literal, so tools can find every key.
  * - `colocated-messages`: a file imports only its own strings, `Name.i18n.json`
  *   next to `Name.tsx`, as with CSS Modules.
- * - `no-messages-access`: the imported strings go only to `useI18n` or
- *   `translate`. At runtime the import is not the JSON, so `messages.en.title`
+ * - `no-messages-access`: the imported strings go only to `useI18n`,
+ *   `translate` or `<Trans messages>`. At runtime the import is not the JSON, so `messages.en.title`
  *   is `undefined`.
  */
 
@@ -34,9 +34,10 @@ function isI18nJsonImport(node) {
 	)
 }
 
-/** The local names of `useI18n` and `translate` imported from the package. */
+/** The local names of `useI18n`, `translate` and `Trans` imported from the
+ *  package. */
 function packageImports(program) {
-	const names = { useI18n: new Set(), translate: new Set() }
+	const names = { useI18n: new Set(), translate: new Set(), Trans: new Set() }
 	for (const statement of program.body) {
 		if (
 			statement.type !== 'ImportDeclaration' ||
@@ -57,10 +58,26 @@ function calleeName(node) {
 	return node.callee.type === 'Identifier' ? node.callee.name : undefined
 }
 
+/** The attribute `name` of a JSX opening element. */
+function jsxAttribute(element, name) {
+	return element.attributes.find(
+		(attribute) =>
+			attribute.type === 'JSXAttribute' && attribute.name.name === name,
+	)
+}
+
+function isTransElement(element, imports) {
+	return (
+		element?.type === 'JSXOpeningElement' &&
+		element.name.type === 'JSXIdentifier' &&
+		imports.Trans.has(element.name.name)
+	)
+}
+
 const staticKeys = {
 	meta: { type: 'problem' },
 	create(context) {
-		let imports = { useI18n: new Set(), translate: new Set() }
+		let imports = { useI18n: new Set(), translate: new Set(), Trans: new Set() }
 		const translateFunctions = new Set()
 		const calls = []
 		const report = (node) =>
@@ -94,6 +111,15 @@ const staticKeys = {
 			},
 			CallExpression(node) {
 				calls.push(node)
+			},
+			JSXOpeningElement(node) {
+				if (!isTransElement(node, imports)) return
+				const attribute = jsxAttribute(node, 'i18nKey')
+				const value =
+					attribute?.value?.type === 'JSXExpressionContainer'
+						? attribute.value.expression
+						: attribute?.value
+				if (!isStringLiteral(value)) report(attribute ?? node)
 			},
 			'Program:exit'() {
 				for (const call of calls) {
@@ -133,7 +159,7 @@ const colocatedMessages = {
 const noMessagesAccess = {
 	meta: { type: 'problem' },
 	create(context) {
-		let imports = { useI18n: new Set(), translate: new Set() }
+		let imports = { useI18n: new Set(), translate: new Set(), Trans: new Set() }
 		const messageNames = new Set()
 		return {
 			Program(node) {
@@ -171,10 +197,16 @@ const noMessagesAccess = {
 					parent.arguments[0] === node &&
 					(imports.useI18n.has(calleeName(parent)) ||
 						imports.translate.has(calleeName(parent)))
-				if (isDeclaration || isPropertyName || isI18nArgument) return
+				const isTransMessages =
+					parent.type === 'JSXExpressionContainer' &&
+					parent.parent?.type === 'JSXAttribute' &&
+					parent.parent.name.name === 'messages' &&
+					isTransElement(parent.parent.parent, imports)
+				if (isDeclaration || isPropertyName || isI18nArgument || isTransMessages)
+					return
 				context.report({
 					node,
-					message: `Give '${node.name}' only to useI18n() or translate(). At runtime it is not the JSON of the file.`,
+					message: `Give '${node.name}' only to useI18n(), translate() or <Trans messages>. At runtime it is not the JSON of the file.`,
 				})
 			},
 		}

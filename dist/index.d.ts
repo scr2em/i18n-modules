@@ -1,3 +1,4 @@
+import { type ReactElement, type ReactNode } from 'react';
 /**
  * Scoped strings, like CSS Modules: a component keeps its strings next to it,
  * in a `Name.i18n.json` file with one object per language:
@@ -26,8 +27,64 @@ export declare function useI18n<Source extends DefaultLanguageMessages>(source: 
     t: <Key extends MessageKey<Source['en']>>(key: Key, ...values: ValuesFor<Source['en'], Key>) => string;
     language: string;
 };
-/** Reads a string outside React (Yup messages, utils), in the current
- *  language. */
+/**
+ * Renders a string that has tags, with React elements in place of the tags:
+ *
+ *   // "terms": "I accept the <link>terms</link>.<br/>Thank you, {{name}}."
+ *   <Trans
+ *     messages={messages}
+ *     i18nKey="terms"
+ *     values={{ name }}
+ *     components={{ link: <a href="/terms" />, br: <br /> }}
+ *   />
+ *
+ * - The text between `<link>` and `</link>` becomes the children of the
+ *   `link` element. Tags can be inside other tags.
+ * - `<br/>` renders the element with no children.
+ * - A tag that is not in `components` shows as plain text. No HTML from a
+ *   string is ever rendered.
+ * - Tags are read before `{{values}}` go in, so a value never becomes a tag.
+ */
+export declare function Trans<Source extends DefaultLanguageMessages>(props: TransProps<Source>): ReactNode;
+/** One set of props for each key of the file, so `values` with `count` is
+ *  required exactly for the plural keys. */
+export type TransProps<Source extends DefaultLanguageMessages> = [
+    MessageKey<Source['en']>
+] extends [never] ? TransPropsFor<Source, string, never> : TransPropsFor<Source, MessageKey<Source['en']>, PluralKey<Source['en']>>;
+type TransPropsFor<Source, Keys extends string, PluralKeys> = {
+    [Key in Keys]: {
+        messages: Source;
+        i18nKey: Key;
+        /** The element for each tag name in the string. */
+        components?: Record<string, ReactElement>;
+    } & (Key extends PluralKeys ? {
+        values: InterpolationValues & {
+            count: number;
+        };
+    } : {
+        values?: InterpolationValues;
+    });
+}[Keys];
+/**
+ * Sets the language of a subtree. Components inside it use `language`, and
+ * components outside it keep the language of the app. The innermost provider
+ * wins. The app needs no provider: with none, components use the language
+ * that `setLanguage` sets.
+ *
+ *   <I18nProvider language="fr">
+ *     <Preview />
+ *   </I18nProvider>
+ *
+ * When `language` changes to a language that is not loaded yet, the subtree
+ * suspends while its strings load. Change it in `startTransition` to keep the
+ * old text on the screen until the new strings are ready.
+ */
+export declare function I18nProvider({ language, children, }: {
+    language: string;
+    children?: ReactNode;
+}): ReactNode;
+/** Reads a string outside React (Yup messages, utils), in the language of the
+ *  app. `I18nProvider` has no effect on it. */
 export declare function translate<Source extends DefaultLanguageMessages, Key extends MessageKey<Source['en']>>(source: Source, key: Key, ...values: ValuesFor<Source['en'], Key>): string;
 export declare function getLanguage(): string;
 /**

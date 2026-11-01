@@ -1,14 +1,17 @@
 {
 	"en": {
 		"title": "i18n modules",
-		"footer": "Each component reads only its own .i18n.json file."
+		"preview": "Preview in French",
+		"footer": "Each component reads only its own <code>.i18n.json</code> file. <link>Read the docs</link>."
 	},
 	"fr": {
 		"title": "Modules i18n",
-		"footer": "Chaque composant lit seulement son propre fichier .i18n.json."
+		"preview": "Aperçu en français",
+		"footer": "Chaque composant lit seulement son propre fichier <code>.i18n.json</code>. <link>Lire la documentation</link>."
 	},
 	"ar": {
 		"title": "وحدات الترجمة",
-		"footer": "كل مكون يقرأ ملف .i18n.json الخاص به فقط."
+		"preview": "معاينة بالفرنسية",
+		"footer": "كل مكون يقرأ ملف <code>.i18n.json</code> الخاص به فقط. <link>اقرأ التوثيق</link>."
 	}
 }

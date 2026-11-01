@@ -12,6 +12,9 @@ conflict in one big translation file.
 - Other languages load in their own chunks, only when the user picks them.
 - The keys are typed. A wrong key fails the type check.
 - Plurals use `Intl.PluralRules`.
+- `<Trans>` puts React elements, such as links, inside a translated sentence.
+- No provider is necessary. Add `<I18nProvider>` only to give a subtree a
+  different language.
 - The build fails when two languages of a file have different keys.
 - An oxlint plugin keeps keys static and strings scoped.
 
@@ -182,6 +185,83 @@ createRoot(root).render(
 )
 ```
 
+### Put elements in a sentence with `<Trans>`
+
+Use `<Trans>` when a sentence has a link, bold text or a line break. Put tags
+in the string, and give one React element for each tag name:
+
+```json
+{
+	"en": {
+		"terms": "Hello {{name}}, please accept the <link>terms</link>.<br/>It takes <bold>one minute</bold>."
+	}
+}
+```
+
+```tsx
+import { Trans } from '@scr2em/i18n-modules'
+
+import messages from './SignUp.i18n.json'
+
+export function SignUp({ name }: { name: string }) {
+	return (
+		<p>
+			<Trans
+				messages={messages}
+				i18nKey="terms"
+				values={{ name }}
+				components={{
+					link: <a href="/terms" />,
+					bold: <strong />,
+					br: <br />,
+				}}
+			/>
+		</p>
+	)
+}
+```
+
+- The text between `<link>` and `</link>` becomes the children of the `link`
+  element. Tags can be inside other tags.
+- `<br/>` renders the element with no children.
+- A tag that is not in `components` shows as plain text. No HTML from a
+  string is ever rendered.
+- Tags are read before the values go in, so a value never becomes a tag.
+- `i18nKey` is typed like the key of `t()`. A plural key needs
+  `values={{ count }}`.
+
+### Give a subtree a different language with `<I18nProvider>`
+
+The app needs no provider. With no provider, every component uses the
+language that `setLanguage` sets. To show part of the page in a different
+language, for example a preview of an email in the language of its reader,
+wrap that part in `<I18nProvider>`:
+
+```tsx
+import { I18nProvider } from '@scr2em/i18n-modules'
+import { Suspense } from 'react'
+
+export function EmailPreview({ readerLanguage }: { readerLanguage: string }) {
+	return (
+		<Suspense>
+			<I18nProvider language={readerLanguage}>
+				<EmailBody />
+			</I18nProvider>
+		</Suspense>
+	)
+}
+```
+
+- Components inside the provider use its language. Components outside it
+  keep the language of the app, also after `setLanguage`.
+- The innermost provider wins.
+- When the language of the provider is not loaded yet, the subtree suspends
+  while its strings load. Its own `<Suspense>` keeps the rest of the page on
+  the screen. To keep the old text on the screen while the new strings load,
+  change `language` in `startTransition`.
+- `translate()` works outside React, so it always uses the language of the
+  app.
+
 ### Read strings outside React
 
 Use `translate` in utils or validation messages. It uses the current
@@ -197,9 +277,10 @@ export const requiredMessage = () => translate(messages, 'required')
 
 ## Example project
 
-`example/` is a small Vite + React app that uses the package. It has three
+`example/` is a small Vite + React app that uses the package. It has
 components with their own `.i18n.json` files, a language picker (English,
-French, Arabic), plurals, and `translate` outside React.
+French, Arabic), plurals, `<Trans>`, a French preview with `<I18nProvider>`,
+and `translate` outside React.
 
 ```sh
 pnpm install

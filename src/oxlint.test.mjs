@@ -10,7 +10,7 @@ const ruleTester = new RuleTester({
 	languageOptions: { parserOptions: { lang: 'tsx' } },
 })
 
-const imports = `import { translate, useI18n } from '@scr2em/i18n-modules'
+const imports = `import { Trans, translate, useI18n } from '@scr2em/i18n-modules'
 import messages from './Page.i18n.json'
 `
 
@@ -19,6 +19,10 @@ ruleTester.run('static-keys', plugin.rules['static-keys'], {
 		`${imports}const { t } = useI18n(messages); t('title'); t(\`title\`)`,
 		`${imports}const { t: translatePage } = useI18n(messages); translatePage('items', { count })`,
 		`${imports}translate(messages, 'title')`,
+		`${imports}const page = <Trans messages={messages} i18nKey="terms" />`,
+		`${imports}const page = <Trans messages={messages} i18nKey={'terms'} />`,
+		// Another component named `Trans` is not checked.
+		`const page = <Trans i18nKey={key} />`,
 		// Another function named `t` is not checked.
 		`const t = (key) => key; t(key)`,
 	],
@@ -36,6 +40,14 @@ ruleTester.run('static-keys', plugin.rules['static-keys'], {
 			errors: [/string literal/],
 		},
 		{ code: `${imports}translate(messages, key)`, errors: [/string literal/] },
+		{
+			code: `${imports}const page = <Trans messages={messages} i18nKey={key} />`,
+			errors: [/string literal/],
+		},
+		{
+			code: `${imports}const page = <Trans messages={messages} />`,
+			errors: [/string literal/],
+		},
 	],
 })
 
@@ -65,9 +77,14 @@ ruleTester.run('no-messages-access', plugin.rules['no-messages-access'], {
 	valid: [
 		`${imports}const { t } = useI18n(messages); translate(messages, 'title')`,
 		`${imports}const page = { messages: 1 }; page.messages`,
+		`${imports}const page = <Trans messages={messages} i18nKey="terms" />`,
 	],
 	invalid: [
 		{ code: `${imports}messages.en.title`, errors: [/only to useI18n/] },
+		{
+			code: `${imports}const page = <Other messages={messages} />`,
+			errors: [/only to useI18n/],
+		},
 		{
 			code: `${imports}const copy = { ...messages }`,
 			errors: [/only to useI18n/],
