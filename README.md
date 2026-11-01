@@ -10,7 +10,8 @@ conflict in one big translation file.
 - The default language is in the component's chunk. The text shows on the
   first render, with no flicker.
 - Other languages load in their own chunks, only when the user picks them.
-- The keys are typed. A wrong key fails the type check.
+- The keys and the `{{values}}` are typed. `t()` autocompletes the values
+  of each string, and a wrong key or value fails the type check.
 - Plurals use `Intl.PluralRules`.
 - `<Trans>` puts React elements, such as links, inside a translated sentence.
 - No provider is necessary. Add `<I18nProvider>` only to give a subtree a
@@ -22,7 +23,8 @@ conflict in one big translation file.
 
 - React 19 or later
 - Vite 6 or later
-- TypeScript with `resolveJsonModule` (for typed keys)
+- TypeScript 5.0 or later, with `resolveJsonModule` and
+  `allowArbitraryExtensions` (for typed keys and values)
 
 ## 1. Install
 
@@ -66,16 +68,47 @@ To use the same text in a different file, put it in that file's own
 The default language is `en`. To use a different one, give
 `i18nModules({ defaultLanguage: 'fr' })`.
 
-Make sure that `tsconfig.json` has `resolveJsonModule`. TypeScript reads the
-keys from the JSON file:
+### Typed keys and values
 
-```json
-{
-	"compilerOptions": {
-		"resolveJsonModule": true
-	}
-}
-```
+The plugin writes a `Name.i18n.d.json.ts` file next to each `Name.i18n.json`
+file. It has the exact text of each string in the default language.
+TypeScript reads it in place of the JSON, so the type check knows the
+`{{values}}` and the tags of every string.
+
+1. Add these options to `tsconfig.json`:
+
+   ```json
+   {
+   	"compilerOptions": {
+   		"resolveJsonModule": true,
+   		"allowArbitraryExtensions": true
+   	}
+   }
+   ```
+
+2. Ignore the generated files in `.gitignore`:
+
+   ```gitignore
+   *.i18n.d.json.ts
+   ```
+
+3. Write the files before `tsc` runs where no Vite server runs, for example
+   in CI:
+
+   ```json
+   {
+   	"scripts": {
+   		"typecheck": "i18n-modules generate src && tsc --noEmit"
+   	}
+   }
+   ```
+
+   In dev, the plugin updates the files when a `.i18n.json` file changes.
+   `vite build` also writes them. To turn this off, give
+   `i18nModules({ declarations: false })`.
+
+Without the generated files, TypeScript types the import as plain JSON, and
+`useI18n` does not accept it.
 
 ## 3. Add the oxlint rules
 
@@ -154,7 +187,8 @@ export function Inbox({ name }: { name: string }) {
 }
 ```
 
-- `{{name}}` is replaced by the value with the same name.
+- `{{name}}` is replaced by the value with the same name. `t('heading', …)`
+  autocompletes `name`. A missing, wrong or extra value fails the type check.
 - `t('unread', { count })` picks `unread_zero`, `unread_one`, `unread_two`,
   `unread_few`, `unread_many` or `unread_other` with the plural rules of the
   current language. `_zero` is used for a count of 0 only when the file has
@@ -242,8 +276,10 @@ export function SignUp({ name }: { name: string }) {
 - A tag that is not in `components` shows as plain text. No HTML from a
   string is ever rendered.
 - Tags are read before the values go in, so a value never becomes a tag.
-- `i18nKey` is typed like the key of `t()`. A plural key needs
-  `values={{ count }}`.
+- `i18nKey` is typed like the key of `t()`. `values` needs one value for each
+  `{{name}}` in the text, and `count` for a plural key.
+- `components` needs one element for each tag in the text. Here the type
+  check fails without `link`, `bold` or `br`.
 
 ### Give a subtree a different language with `<I18nProvider>`
 

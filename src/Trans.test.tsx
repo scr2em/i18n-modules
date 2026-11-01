@@ -13,14 +13,13 @@ const english = {
 	unclosed: 'Start <bold>never closed',
 	files_one: '<bold>{{count}}</bold> file',
 	files_other: '<bold>{{count}}</bold> files',
-}
-// TypeScript types an import as the file's JSON; this stands in for it.
+} as const
 const messages = registerI18nModule('test/Trans.i18n', 'en', english, {
 	fr: () =>
 		Promise.resolve({
 			default: { terms: "J'accepte les <link>conditions</link>." },
 		}),
-}) as unknown as { en: typeof english }
+})
 
 const components = {
 	link: <a href="/terms" />,
@@ -74,6 +73,7 @@ describe('Trans', () => {
 
 	it('shows unknown, stray and unclosed tags as text', () => {
 		const { container, rerender } = render(
+			// @ts-expect-error -- the test leaves out the `script` and `b` tags
 			<Trans messages={messages} i18nKey="unknown" components={components} />,
 		)
 		expect(container.textContent).toBe(
@@ -114,7 +114,20 @@ describe('Trans', () => {
 					{/* @ts-expect-error -- a key that the file does not have */}
 					<Trans messages={messages} i18nKey="missing" />
 					{/* @ts-expect-error -- a plural key needs a count */}
-					<Trans messages={messages} i18nKey="files" />
+					<Trans messages={messages} i18nKey="files" components={components} />
+					{/* @ts-expect-error -- the text has {{name}} */}
+					<Trans messages={messages} i18nKey="greeting" components={components} />
+					<Trans
+						messages={messages}
+						i18nKey="greeting"
+						// @ts-expect-error -- the name in the text is `name`
+						values={{ nmae: 'Ada' }}
+						components={components}
+					/>
+					{/* @ts-expect-error -- the text has a <link> tag */}
+					<Trans messages={messages} i18nKey="terms" components={{}} />
+					{/* @ts-expect-error -- the text has <bold> and <link> tags */}
+					<Trans messages={messages} i18nKey="nested" components={{ bold: <strong /> }} />
 				</>
 			)
 		}

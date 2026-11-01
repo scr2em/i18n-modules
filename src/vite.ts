@@ -1,7 +1,15 @@
-import { readFileSync, realpathSync } from 'node:fs'
+import { realpathSync } from 'node:fs'
 import { basename, dirname, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { type Plugin } from 'vite'
+
+import {
+	FILE_SUFFIX,
+	generateDeclarations,
+	type Messages,
+	readLanguages,
+	writeDeclaration,
+} from './declarations.ts'
 
 /**
  * Lets a component or util keep its own strings next to it, in a
@@ -21,6 +29,10 @@ import { type Plugin } from 'vite'
  *   `Page.i18n.json` is for `Page.tsx`, and for its tests and stories
  *   (`Page.test.tsx`, `Page.spec.tsx`, `Page.stories.tsx`). An import from a
  *   different file fails the dev server (error overlay) and the build.
+ * - It writes `Name.i18n.d.json.ts` next to each file, with the exact text
+ *   of the default language. With `allowArbitraryExtensions` in
+ *   `tsconfig.json`, TypeScript reads it, so `t()` autocompletes the
+ *   `{{values}}` of each string and `<Trans>` checks its tags.
  * - Every language must have the same keys as the default language. A missing
  *   or extra key fails the dev server (error overlay) and the build. Plural
  *   forms (`_one`, `_other`, …) can differ, because languages have different
@@ -29,6 +41,7 @@ import { type Plugin } from 'vite'
 export function i18nModules({
 	runtime = RUNTIME,
 	defaultLanguage = 'en',
+	declarations = true,
 }: {
 	/** The module that exports `registerI18nModule`, as a path from the
 	 *  project root. The default is this package's runtime. A path alias
@@ -36,6 +49,9 @@ export function i18nModules({
 	 *  to resolve an alias from. */
 	runtime?: string
 	defaultLanguage?: string
+	/** Writes a `.i18n.d.json.ts` file next to each `.i18n.json` file.
+	 *  Default: true. */
+	declarations?: boolean
 } = {}): Plugin {
 	let root = process.cwd()
 
@@ -45,6 +61,21 @@ export function i18nModules({
 		configResolved(config) {
 			// Resolved files have real paths, so the root must have one too.
 			root = realpathSync(config.root)
+		},
+		buildStart() {
+			if (declarations) {
+				generateDeclarations(root, defaultLanguage)
+			}
+		},
+		configureServer(server) {
+			if (!declarations) {
+				return
+			}
+			server.watcher.on('add', (file) => {
+				if (file.endsWith(FILE_SUFFIX)) {
+					writeDeclaration(file, defaultLanguage)
+				}
+			})
 		},
 		async resolveId(source, importer) {
 			if (source.startsWith(LANGUAGE_SPECIFIER)) {
@@ -68,6 +99,9 @@ export function i18nModules({
 				const file = id.slice(MODULE_ID.length, -MODULE_ID_END.length)
 				this.addWatchFile(file)
 				const languages = readLanguages(file)
+				if (declarations) {
+					writeDeclaration(file, defaultLanguage)
+				}
 				const problems = findKeyProblems(languages, defaultLanguage)
 				if (problems.length > 0) {
 					this.error(`${relative(root, file)}:\n${problems.join('\n')}`)
@@ -107,6 +141,9 @@ export function i18nModules({
 			if (!file.endsWith(FILE_SUFFIX)) {
 				return
 			}
+			if (declarations) {
+				writeDeclaration(file, defaultLanguage)
+			}
 			const graph = this.environment.moduleGraph
 			const modules = [...graph.idToModuleMap.entries()]
 				.filter(
@@ -125,8 +162,6 @@ export function i18nModules({
 	}
 }
 
-type Messages = { [key: string]: string | Messages }
-
 // `index.ts` next to this file in the source, `index.js` in the build.
 const RUNTIME = fileURLToPath(
 	new URL(
@@ -134,7 +169,6 @@ const RUNTIME = fileURLToPath(
 		import.meta.url,
 	),
 )
-const FILE_SUFFIX = '.i18n.json'
 // The ids must not end in `.json`, or Vite's JSON handling takes the module.
 const MODULE_ID = '\0i18n-module:'
 const MODULE_ID_END = '::module'
@@ -171,34 +205,6 @@ function importerProblem(file: string, importer: string | undefined) {
 
 function namespaceOf(root: string, file: string) {
 	return relative(root, file).split('\\').join('/').slice(0, -'.json'.length)
-}
-
-function readLanguages(file: string): Record<string, Messages> {
-	const content: unknown = JSON.parse(readFileSync(file, 'utf8'))
-	if (!isMessages(content)) {
-		throw new Error(
-			`${file}: expected an object with one object of strings per language`,
-		)
-	}
-	const languages: Record<string, Messages> = {}
-	for (const [language, messages] of Object.entries(content)) {
-		if (typeof messages === 'string') {
-			throw new Error(`${file}: "${language}" must be an object of strings`)
-		}
-		languages[language] = messages
-	}
-	return languages
-}
-
-function isMessages(value: unknown): value is Messages {
-	return (
-		typeof value === 'object' &&
-		value !== null &&
-		!Array.isArray(value) &&
-		Object.values(value).every(
-			(entry) => typeof entry === 'string' || isMessages(entry),
-		)
-	)
 }
 
 /** The key paths of `messages`, with plural forms reduced to one key. */

@@ -3,9 +3,10 @@
 	"compilerOptions": {
 		"noEmit": false,
 		"allowImportingTsExtensions": false,
+		"rewriteRelativeImportExtensions": true,
 		"declaration": true,
 		"rootDir": "src",
 		"outDir": "dist"
 	},
-	"include": ["src/index.ts", "src/vite.ts"]
+	"include": ["src/index.ts", "src/vite.ts", "src/cli.ts", "src/declarations.ts"]
 }

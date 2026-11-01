@@ -22,7 +22,10 @@ import {
  *   const { t } = useI18n(messages)
  *   t('title')
  *
- * - `{{name}}` in a string is replaced by `values.name`.
+ * - `{{name}}` in a string is replaced by `values.name`. The type check knows
+ *   the names from the text, so `t()` autocompletes them and fails when one
+ *   is missing or wrong. This needs the `.i18n.d.json.ts` files that the Vite
+ *   plugin writes.
  * - `t('items', { count })` reads `items_one`, `items_other`, … with the plural
  *   rules of the current language (`Intl.PluralRules`). `items_zero` is used
  *   for a count of 0 when the file has it. A plural key needs `count`: the
@@ -34,13 +37,11 @@ import {
  * first render. Other languages load in their own chunks. `setLanguage` loads
  * them before it switches, so a component never shows two languages.
  */
-export function useI18n<Source extends DefaultLanguageMessages>(
-	source: Source,
-) {
+export function useI18n<Tree extends Messages>(source: I18nMessages<Tree>) {
 	const { module, language } = useModule(source)
-	const t = <Key extends MessageKey<Source['en']>>(
+	const t = <Key extends MessageKey<Tree>>(
 		key: Key,
-		...values: ValuesFor<Source['en'], Key>
+		...values: ValuesFor<Tree, Key>
 	): string => format(module, language, key, values[0])
 	return { t, language }
 }
@@ -62,9 +63,11 @@ export function useI18n<Source extends DefaultLanguageMessages>(
  * - A tag that is not in `components` shows as plain text. No HTML from a
  *   string is ever rendered.
  * - Tags are read before `{{values}}` go in, so a value never becomes a tag.
+ * - The type check reads the tags and the values from the text: `components`
+ *   needs one element for each tag, and `values` one value for each name.
  */
-export function Trans<Source extends DefaultLanguageMessages>(
-	props: TransProps<Source>,
+export function Trans<Tree extends Messages>(
+	props: TransProps<Tree>,
 ): ReactNode {
 	const { module, language } = useModule(props.messages)
 	const values = 'values' in props ? props.values : undefined
@@ -76,26 +79,26 @@ export function Trans<Source extends DefaultLanguageMessages>(
 	)
 }
 
-/** One set of props for each key of the file, so `values` with `count` is
- *  required exactly for the plural keys. */
-export type TransProps<Source extends DefaultLanguageMessages> = [
-	MessageKey<Source['en']>,
-] extends [never]
+/** One set of props for each key of the file, with the `values` and the
+ *  `components` that the text of that key needs. */
+export type TransProps<Tree extends Messages> = [MessageKey<Tree>] extends [
+	never,
+]
 	? // No known keys: TypeScript checks `Trans` as a JSX component with
 		// the general `Messages` type, which has no keys.
-		TransPropsFor<Source, string, never>
-	: TransPropsFor<Source, MessageKey<Source['en']>, PluralKey<Source['en']>>
-
-type TransPropsFor<Source, Keys extends string, PluralKeys> = {
-	[Key in Keys]: {
-		messages: Source
-		i18nKey: Key
-		/** The element for each tag name in the string. */
-		components?: Record<string, ReactElement>
-	} & (Key extends PluralKeys
-		? { values: InterpolationValues & { count: number } }
-		: { values?: InterpolationValues })
-}[Keys]
+		{
+			messages: I18nMessages<Tree>
+			i18nKey: string
+			values?: InterpolationValues
+			components?: Record<string, ReactElement>
+		}
+	: {
+			[Key in MessageKey<Tree>]: {
+				messages: I18nMessages<Tree>
+				i18nKey: Key
+			} & ValuesProp<Tree, Key> &
+				ComponentsProp<Tree, Key>
+		}[MessageKey<Tree>]
 
 /**
  * Sets the language of a subtree. Components inside it use `language`, and
@@ -123,10 +126,11 @@ export function I18nProvider({
 
 /** Reads a string outside React (Yup messages, utils), in the language of the
  *  app. `I18nProvider` has no effect on it. */
-export function translate<
-	Source extends DefaultLanguageMessages,
-	Key extends MessageKey<Source['en']>,
->(source: Source, key: Key, ...values: ValuesFor<Source['en'], Key>): string {
+export function translate<Tree extends Messages, Key extends MessageKey<Tree>>(
+	source: I18nMessages<Tree>,
+	key: Key,
+	...values: ValuesFor<Tree, Key>
+): string {
 	return format(moduleOf(source), state.language, key, values[0])
 }
 
@@ -151,13 +155,14 @@ export async function setLanguage(language: string): Promise<void> {
 	}
 }
 
-/** Called by the code that the Vite plugin makes from a `.i18n.json` file. */
-export function registerI18nModule(
+/** Called by the code that the Vite plugin makes from a `.i18n.json` file.
+ *  Tests can call it to make strings without the plugin. */
+export function registerI18nModule<const Tree extends Messages>(
 	namespace: string,
 	defaultLanguage: string,
-	defaultMessages: Messages,
+	defaultMessages: Tree,
 	loaders: Record<string, LanguageLoader>,
-): I18nModuleHandle {
+): I18nMessages<Tree> {
 	const isHotUpdate = modules.has(namespace)
 	modules.set(namespace, {
 		defaultLanguage,
@@ -168,12 +173,22 @@ export function registerI18nModule(
 	if (isHotUpdate) {
 		setState({ language: state.language })
 	}
-	return { [NAMESPACE]: namespace }
+	const handle: I18nModuleHandle = { [NAMESPACE]: namespace }
+	// `I18nMessages` only carries the text for the type check.
+	return handle as unknown as I18nMessages<Tree>
 }
 
-type Messages = { [key: string]: string | Messages }
+/**
+ * The type of a `.i18n.json` import, from its `.i18n.d.json.ts` file. `Tree`
+ * is the text of the default language. At runtime the import is not the JSON,
+ * so this type has no properties to read: give it to `useI18n`, `translate`
+ * or `<Trans>`.
+ */
+export type I18nMessages<Tree extends Messages> = {
+	readonly [MESSAGES_TREE]: Tree
+}
 
-type DefaultLanguageMessages = { en: Messages }
+export type Messages = { readonly [key: string]: string | Messages }
 
 type InterpolationValues = Record<string, string | number>
 
@@ -189,9 +204,10 @@ type I18nModule = {
 
 const NAMESPACE = Symbol('i18n module namespace')
 
-/** What a `.i18n.json` import is at runtime. TypeScript still types it as the
- *  file's JSON, which is what gives `useI18n` its keys. The
- *  `i18n-modules/no-messages-access` lint rule stops reads of that JSON. */
+/** A key that exists only for the type check, to carry the text of a file. */
+declare const MESSAGES_TREE: unique symbol
+
+/** What a `.i18n.json` import is at runtime. */
 type I18nModuleHandle = { readonly [NAMESPACE]: string }
 
 type PluralSuffix = 'zero' | 'one' | 'two' | 'few' | 'many' | 'other'
@@ -208,10 +224,79 @@ type PluralKey<Tree> = {
 		: `${Key}.${PluralKey<Tree[Key]>}`
 }[keyof Tree & string]
 
-/** The values that `t(key, …)` takes: `count` is required for a plural key. */
-type ValuesFor<Tree, Key> = Key extends PluralKey<Tree>
-	? [values: InterpolationValues & { count: number }]
-	: [values?: InterpolationValues]
+type Trim<Text extends string> = Text extends ` ${infer Rest}`
+	? Trim<Rest>
+	: Text extends `${infer Rest} `
+		? Trim<Rest>
+		: Text
+
+/** The names in `{{name}}` in `Text`. */
+type PlaceholderNames<Text extends string> =
+	Text extends `${string}{{${infer Name}}}${infer Rest}`
+		? Trim<Name> | PlaceholderNames<Rest>
+		: never
+
+/** The names of the opening and self-closing tags in `Text`: `link` for
+ *  `<link>…</link>`, `br` for `<br/>`. */
+type TagNames<Text extends string> =
+	Text extends `${string}<${infer Tag}>${infer Rest}`
+		? TagName<Tag> | TagNames<Rest>
+		: never
+
+type TagName<Tag extends string> = Tag extends `/${string}` | ` ${string}`
+	? never
+	: Tag extends `${infer Name}/`
+		? Trim<Name>
+		: Tag
+
+/** The text of `Key` in `Tree`, with all its plural forms. */
+type TextOf<Tree, Key extends string> = Key extends `${infer Head}.${infer Rest}`
+	? Head extends keyof Tree
+		? TextOf<Tree[Head], Rest>
+		: never
+	: {
+			[Name in keyof Tree & string]: WithoutPluralSuffix<Name> extends Key
+				? Tree[Name] extends string
+					? Tree[Name]
+					: never
+				: never
+		}[keyof Tree & string]
+
+/** The values that the text of `Key` needs: one for each `{{name}}`, and
+ *  `count` for a plural key. */
+type ValuesObject<Tree, Key extends string> = {
+	[Name in
+		| PlaceholderNames<TextOf<Tree, Key>>
+		| (Key extends PluralKey<Tree> ? 'count' : never)]: Name extends 'count'
+		? number
+		: string | number
+}
+
+/** The values that `t(key, …)` takes. Without the text of the strings (when
+ *  the import is typed as plain JSON), any values are allowed. */
+type ValuesFor<Tree, Key extends string> =
+	string extends TextOf<Tree, Key>
+		? [values?: InterpolationValues]
+		: [keyof ValuesObject<Tree, Key>] extends [never]
+			? []
+			: [values: ValuesObject<Tree, Key>]
+
+type ValuesProp<Tree, Key extends string> =
+	string extends TextOf<Tree, Key>
+		? { values?: InterpolationValues }
+		: [keyof ValuesObject<Tree, Key>] extends [never]
+			? { values?: never }
+			: { values: ValuesObject<Tree, Key> }
+
+type ComponentsProp<Tree, Key extends string> =
+	string extends TextOf<Tree, Key>
+		? { components?: Record<string, ReactElement> }
+		: [TagNames<TextOf<Tree, Key>>] extends [never]
+			? { components?: never }
+			: {
+					/** One element for each tag in the text. */
+					components: Record<TagNames<TextOf<Tree, Key>>, ReactElement>
+				}
 
 /** The dot paths to the strings in `Tree`. Plural forms give one key, the one
  *  that `t(key, { count })` takes. */

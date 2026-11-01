@@ -18,9 +18,8 @@ const english = {
 	onlyInEnglish: 'Only English',
 	items_one: '{{count}} item',
 	items_other: '{{count}} items',
-}
+} as const
 let frenchLoads = 0
-// TypeScript types an import as the file's JSON; this stands in for it.
 const messages = registerI18nModule('test/Greeting.i18n', 'en', english, {
 	fr: () => {
 		frenchLoads += 1
@@ -32,7 +31,7 @@ const messages = registerI18nModule('test/Greeting.i18n', 'en', english, {
 			},
 		})
 	},
-}) as unknown as { en: typeof english }
+})
 
 function Greeting() {
 	const { t } = useI18n(messages)
@@ -52,6 +51,16 @@ function TypeChecks() {
 	t('items_one')
 	// @ts-expect-error -- a plural key needs a count
 	t('items')
+	// @ts-expect-error -- the text has {{name}}
+	t('greeting.title')
+	// @ts-expect-error -- the name in the text is `name`
+	t('greeting.title', { nmae: 'Ada' })
+	// @ts-expect-error -- the text has no values
+	t('onlyInEnglish', { name: 'Ada' })
+	// Values can be numbers, and `count` must be a number.
+	t('greeting.title', { name: 7 })
+	// @ts-expect-error -- `count` must be a number
+	t('items', { count: '2' })
 	return null
 }
 
@@ -95,7 +104,7 @@ describe('useI18n', () => {
 			'en',
 			{ title: 'Late' },
 			{ fr: () => Promise.resolve({ default: { title: 'Tardif' } }) },
-		) as unknown as { en: { title: string } }
+		)
 		function Late() {
 			const { t } = useI18n(lateMessages)
 			return <p>{t('title')}</p>
@@ -150,9 +159,7 @@ describe('plurals', () => {
 					},
 				}),
 		},
-	) as unknown as {
-		en: { files_zero: string; files_one: string; files_other: string }
-	}
+	)
 
 	it('uses the zero form when the file has it', () => {
 		expect(translate(pluralMessages, 'files', { count: 0 })).toBe('No files')

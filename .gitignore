@@ -1,2 +1,4 @@
 node_modules
 example/dist
+# Made by i18n-modules from each .i18n.json file
+*.i18n.d.json.ts

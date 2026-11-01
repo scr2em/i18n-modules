@@ -11,7 +11,10 @@ import { cloneElement, createContext, createElement, Fragment, use, useContext, 
  *   const { t } = useI18n(messages)
  *   t('title')
  *
- * - `{{name}}` in a string is replaced by `values.name`.
+ * - `{{name}}` in a string is replaced by `values.name`. The type check knows
+ *   the names from the text, so `t()` autocompletes them and fails when one
+ *   is missing or wrong. This needs the `.i18n.d.json.ts` files that the Vite
+ *   plugin writes.
  * - `t('items', { count })` reads `items_one`, `items_other`, … with the plural
  *   rules of the current language (`Intl.PluralRules`). `items_zero` is used
  *   for a count of 0 when the file has it. A plural key needs `count`: the
@@ -45,6 +48,8 @@ export function useI18n(source) {
  * - A tag that is not in `components` shows as plain text. No HTML from a
  *   string is ever rendered.
  * - Tags are read before `{{values}}` go in, so a value never becomes a tag.
+ * - The type check reads the tags and the values from the text: `components`
+ *   needs one element for each tag, and `values` one value for each name.
  */
 export function Trans(props) {
     const { module, language } = useModule(props.messages);
@@ -89,7 +94,8 @@ export async function setLanguage(language) {
         setState({ language });
     }
 }
-/** Called by the code that the Vite plugin makes from a `.i18n.json` file. */
+/** Called by the code that the Vite plugin makes from a `.i18n.json` file.
+ *  Tests can call it to make strings without the plugin. */
 export function registerI18nModule(namespace, defaultLanguage, defaultMessages, loaders) {
     const isHotUpdate = modules.has(namespace);
     modules.set(namespace, {
@@ -101,7 +107,9 @@ export function registerI18nModule(namespace, defaultLanguage, defaultMessages, 
     if (isHotUpdate) {
         setState({ language: state.language });
     }
-    return { [NAMESPACE]: namespace };
+    const handle = { [NAMESPACE]: namespace };
+    // `I18nMessages` only carries the text for the type check.
+    return handle;
 }
 const NAMESPACE = Symbol('i18n module namespace');
 const modules = new Map();

@@ -11,7 +11,6 @@ import {
 	useI18n,
 } from './index.ts'
 
-// TypeScript types an import as the file's JSON; this stands in for it.
 const messages = registerI18nModule(
 	'test/Provider.i18n',
 	'en',
@@ -20,7 +19,7 @@ const messages = registerI18nModule(
 		fr: () => Promise.resolve({ default: { title: 'Titre' } }),
 		de: () => Promise.resolve({ default: { title: 'Titel' } }),
 	},
-) as unknown as { en: { title: string } }
+)
 
 function Title({ testId }: { testId: string }) {
 	const { t, language } = useI18n(messages)
@@ -94,7 +93,7 @@ describe('I18nProvider', () => {
 			'en',
 			{ title: 'Late' },
 			{ fr: () => Promise.resolve({ default: { title: 'Tardif' } }) },
-		) as unknown as { en: { title: string } }
+		)
 		function Late() {
 			const { t } = useI18n(lateMessages)
 			return <p>{t('title')}</p>
