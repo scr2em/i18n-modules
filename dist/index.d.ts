@@ -28,7 +28,9 @@ import { type ReactElement, type ReactNode } from 'react';
  * them before it switches, so a component never shows two languages.
  */
 export declare function useI18n<Tree extends Messages>(source: I18nMessages<Tree>): {
-    t: <Key extends MessageKey<Tree>>(key: Key, ...values: ValuesFor<Tree, Key>) => string;
+    t: (<Key extends MessageKey<Tree>>(key: Key, ...values: ValuesFor<Tree, Key>) => string) & {
+        readonly [MESSAGES_TREE]: Tree;
+    };
     language: string;
 };
 /**
@@ -123,7 +125,9 @@ export declare function setDefaultValues(values: {
  *   const tSchema = useSchemaTranslation()
  *   const schema = getSchema(tSchema)
  */
-export type TranslateFunction<Source> = Source extends I18nMessages<infer Tree> ? <Key extends MessageKey<Tree>>(key: Key, ...values: ValuesFor<Tree, Key>) => string : never;
+export type TranslateFunction<Source> = Source extends I18nMessages<infer Tree> ? (<Key extends MessageKey<Tree>>(key: Key, ...values: ValuesFor<Tree, Key>) => string) & {
+    readonly [MESSAGES_TREE]: Tree;
+} : never;
 export declare function getLanguage(): string;
 /**
  * Loads the strings of every imported module for `language`, then switches

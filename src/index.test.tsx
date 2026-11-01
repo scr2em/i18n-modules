@@ -7,6 +7,7 @@ import {
 	getLanguage,
 	registerI18nModule,
 	setLanguage,
+	type TranslateFunction,
 	useI18n,
 } from './index.ts'
 import { tFor } from './testUtils.ts'
@@ -261,5 +262,41 @@ describe('the language of the app', () => {
 		await setLanguage('en')
 		await setLanguage('fr')
 		expect(frenchLoads - loadsBefore).toBeLessThanOrEqual(1)
+	})
+})
+
+describe('TranslateFunction', () => {
+	it('accepts the t of a file only where its strings have every key', () => {
+		const helperMessages = registerI18nModule(
+			'test/Helper.i18n',
+			'en',
+			{ invalid: 'Invalid' },
+			{},
+		)
+		const callerMessages = registerI18nModule(
+			'test/Caller.i18n',
+			'en',
+			{ invalid: 'Invalid', title: 'Title' },
+			{},
+		)
+		const otherMessages = registerI18nModule(
+			'test/Other.i18n',
+			'en',
+			{ title: 'Title' },
+			{},
+		)
+		const helper = (t: TranslateFunction<typeof helperMessages>) => t('invalid')
+
+		function Component() {
+			const { t: tCaller } = useI18n(callerMessages)
+			const { t: tOther } = useI18n(otherMessages)
+			// The caller's strings have `invalid` with the same text.
+			helper(tCaller)
+			// @ts-expect-error -- the other file has no `invalid`
+			helper(tOther)
+			return <p>{helper(tCaller)}</p>
+		}
+		render(<Component />)
+		expect(screen.getByText('Invalid')).toBeTruthy()
 	})
 })

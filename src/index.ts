@@ -48,7 +48,7 @@ export function useI18n<Tree extends Messages>(source: I18nMessages<Tree>) {
 		translator = (key, values) => format(module, language, key, values)
 		module.translators.set(language, translator)
 	}
-	const t = translator as TranslateFunction<I18nMessages<Tree>>
+	const t = translator as unknown as TranslateFunction<I18nMessages<Tree>>
 	return { t, language }
 }
 
@@ -175,10 +175,16 @@ export function setDefaultValues(values: {
  */
 export type TranslateFunction<Source> =
 	Source extends I18nMessages<infer Tree>
-		? <Key extends MessageKey<Tree>>(
+		? (<Key extends MessageKey<Tree>>(
 				key: Key,
 				...values: ValuesFor<Tree, Key>
-			) => string
+			) => string) & {
+				// TypeScript relates two generic functions loosely, so without this
+				// the `t` of any file would fit a helper of any other file. With it,
+				// a `t` fits only where its strings have every key that the helper
+				// reads, with the same text.
+				readonly [MESSAGES_TREE]: Tree
+			}
 		: never
 
 export function getLanguage(): string {
