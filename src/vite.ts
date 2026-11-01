@@ -88,6 +88,11 @@ export function i18nModules({
 			if (!source.endsWith(FILE_SUFFIX)) {
 				return null
 			}
+			// The file itself, which `load` watches with `addWatchFile`: Vite
+			// resolves watched files in dev and in Vitest. It is not an import.
+			if (importer?.startsWith(MODULE_ID)) {
+				return null
+			}
 			const resolved = await this.resolve(source, importer, { skipSelf: true })
 			if (!resolved) {
 				return null

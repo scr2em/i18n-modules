@@ -8,7 +8,7 @@ import {
 } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { build } from 'vite'
+import { build, createServer } from 'vite'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { findKeyProblems, i18nModules } from './vite.ts'
@@ -210,5 +210,34 @@ describe('the build', () => {
 				},
 			),
 		).rejects.toThrow('cannot import')
+	})
+
+	it('loads the strings in a dev server, which resolves the watched files', async () => {
+		root = mkdtempSync(join(tmpdir(), 'i18n-modules-'))
+		writeFileSync(
+			join(root, 'Page.i18n.json'),
+			JSON.stringify({ en: { title: 'Title' } }),
+		)
+		writeFileSync(
+			join(root, 'runtime.js'),
+			'export const registerI18nModule = (namespace) => namespace',
+		)
+		writeFileSync(
+			join(root, 'Page.js'),
+			"import messages from './Page.i18n.json'\nexport default messages",
+		)
+		const server = await createServer({
+			configFile: false,
+			root,
+			logLevel: 'silent',
+			plugins: [i18nModules({ runtime: 'runtime.js' })],
+			server: { middlewareMode: true, ws: false },
+		})
+		try {
+			const page = await server.ssrLoadModule('/Page.js')
+			expect(page.default).toBe('Page.i18n')
+		} finally {
+			await server.close()
+		}
 	})
 })
