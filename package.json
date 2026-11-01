@@ -1,0 +1,43 @@
+{
+  "name": "@scr2em/i18n-modules",
+  "version": "0.1.0",
+  "description": "Scoped i18n strings for React and Vite, like CSS Modules: each component keeps its own .i18n.json file.",
+  "author": "Mohammed M. Abdelgwad <scr2em@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/scr2em/i18n-modules.git"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.ts",
+    "./vite": "./src/vite.ts",
+    "./oxlint": "./src/oxlint.mjs"
+  },
+  "files": [
+    "src",
+    "!src/**/*.test.*"
+  ],
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "react": ">=19",
+    "vite": ">=6"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "6.9.1",
+    "@testing-library/react": "16.3.0",
+    "@types/node": "22.15.21",
+    "@types/react": "19.2.7",
+    "@types/react-dom": "19.2.3",
+    "jsdom": "26.1.0",
+    "oxlint": "1.73.0",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "typescript": "7.0.2",
+    "vite": "8.1.4",
+    "vitest": "4.1.10"
+  }
+}

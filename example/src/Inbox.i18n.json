@@ -1,0 +1,30 @@
+{
+	"en": {
+		"heading": "Inbox",
+		"unread_zero": "No unread messages",
+		"unread_one": "{{count}} unread message",
+		"unread_other": "{{count}} unread messages",
+		"add": "Add a message",
+		"clear": "Clear"
+	},
+	"fr": {
+		"heading": "Boîte de réception",
+		"unread_zero": "Aucun message non lu",
+		"unread_one": "{{count}} message non lu",
+		"unread_many": "{{count}} de messages non lus",
+		"unread_other": "{{count}} messages non lus",
+		"add": "Ajouter un message",
+		"clear": "Effacer"
+	},
+	"ar": {
+		"heading": "البريد الوارد",
+		"unread_zero": "لا توجد رسائل غير مقروءة",
+		"unread_one": "رسالة واحدة غير مقروءة",
+		"unread_two": "رسالتان غير مقروءتين",
+		"unread_few": "{{count}} رسائل غير مقروءة",
+		"unread_many": "{{count}} رسالة غير مقروءة",
+		"unread_other": "{{count}} رسالة غير مقروءة",
+		"add": "أضف رسالة",
+		"clear": "مسح"
+	}
+}

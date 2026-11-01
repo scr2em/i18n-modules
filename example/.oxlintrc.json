@@ -1,0 +1,8 @@
+{
+  "jsPlugins": ["@scr2em/i18n-modules/oxlint"],
+  "rules": {
+    "i18n-modules/static-keys": "error",
+    "i18n-modules/colocated-messages": "error",
+    "i18n-modules/no-messages-access": "error"
+  }
+}
