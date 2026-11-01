@@ -3,7 +3,9 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "predev": "pnpm --dir .. build",
     "dev": "vite",
+    "prebuild": "pnpm --dir .. build",
     "build": "tsc --noEmit && vite build",
     "lint": "oxlint src"
   },

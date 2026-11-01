@@ -116,7 +116,13 @@ export function i18nModules({
 
 type Messages = { [key: string]: string | Messages }
 
-const RUNTIME = fileURLToPath(new URL('./index.ts', import.meta.url))
+// `index.ts` next to this file in the source, `index.js` in the build.
+const RUNTIME = fileURLToPath(
+	new URL(
+		import.meta.url.endsWith('.ts') ? './index.ts' : './index.js',
+		import.meta.url,
+	),
+)
 const FILE_SUFFIX = '.i18n.json'
 // The ids must not end in `.json`, or Vite's JSON handling takes the module.
 const MODULE_ID = '\0i18n-module:'
