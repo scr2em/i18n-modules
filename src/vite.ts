@@ -1,5 +1,5 @@
 import { readFileSync, realpathSync } from 'node:fs'
-import { relative, resolve } from 'node:path'
+import { basename, dirname, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { type Plugin } from 'vite'
 
@@ -17,6 +17,10 @@ import { type Plugin } from 'vite'
  *   with the code that uses them.
  * - Every other language goes to its own chunk, which loads only when the user
  *   uses that language.
+ * - Only the file with the same name in the same folder can import it:
+ *   `Page.i18n.json` is for `Page.tsx`, and for its tests and stories
+ *   (`Page.test.tsx`, `Page.spec.tsx`, `Page.stories.tsx`). An import from a
+ *   different file fails the dev server (error overlay) and the build.
  * - Every language must have the same keys as the default language. A missing
  *   or extra key fails the dev server (error overlay) and the build. Plural
  *   forms (`_one`, `_other`, …) can differ, because languages have different
@@ -50,7 +54,14 @@ export function i18nModules({
 				return null
 			}
 			const resolved = await this.resolve(source, importer, { skipSelf: true })
-			return resolved ? `${MODULE_ID}${resolved.id}${MODULE_ID_END}` : null
+			if (!resolved) {
+				return null
+			}
+			const problem = importerProblem(resolved.id, importer)
+			if (problem) {
+				this.error(problem)
+			}
+			return `${MODULE_ID}${resolved.id}${MODULE_ID_END}`
 		},
 		load(id) {
 			if (id.startsWith(MODULE_ID) && id.endsWith(MODULE_ID_END)) {
@@ -130,6 +141,33 @@ const MODULE_ID_END = '::module'
 const LANGUAGE_SPECIFIER = 'i18n-module-language:'
 const LANGUAGE_SEPARATOR = '::'
 const PLURAL_SUFFIX = /_(?:zero|one|two|few|many|other)$/
+
+const IMPORTER_SUFFIXES = ['', '.test', '.spec', '.stories']
+
+/** The names of the files that can import `file`, without their extension. */
+export function allowedImporters(file: string): string[] {
+	const name = basename(file).slice(0, -FILE_SUFFIX.length)
+	return IMPORTER_SUFFIXES.map((suffix) => `${name}${suffix}`)
+}
+
+/** Why `importer` cannot import `file`, or nothing when it can. */
+function importerProblem(file: string, importer: string | undefined) {
+	const importerFile = importer?.split('?')[0]
+	if (!importerFile) {
+		return undefined
+	}
+	const importerName = basename(importerFile).replace(/\.[^.]+$/, '')
+	if (
+		dirname(importerFile) === dirname(file) &&
+		allowedImporters(file).includes(importerName)
+	) {
+		return undefined
+	}
+	const allowed = allowedImporters(file)
+		.map((name) => `${name}.*`)
+		.join(', ')
+	return `${importerFile} cannot import ${file}. Only ${allowed} in the same folder can import it. To use the same text in a different file, put it in that file's own .i18n.json file.`
+}
 
 function namespaceOf(root: string, file: string) {
 	return relative(root, file).split('\\').join('/').slice(0, -'.json'.length)

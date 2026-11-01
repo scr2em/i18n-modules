@@ -69,17 +69,20 @@ describe('the build', () => {
 		rmSync(root, { recursive: true, force: true })
 	})
 
-	async function buildFixture(file: object) {
+	async function buildFixture(
+		file: object,
+		{
+			importer = 'Page.js',
+			code = "import messages from './Page.i18n.json'\nconsole.log(messages)",
+		} = {},
+	) {
 		root = mkdtempSync(join(tmpdir(), 'i18n-modules-'))
 		writeFileSync(join(root, 'Page.i18n.json'), JSON.stringify(file))
 		writeFileSync(
 			join(root, 'runtime.js'),
 			'export const registerI18nModule = (...args) => args',
 		)
-		writeFileSync(
-			join(root, 'main.js'),
-			"import messages from './Page.i18n.json'\nconsole.log(messages)",
-		)
+		writeFileSync(join(root, importer), code)
 		await build({
 			configFile: false,
 			root,
@@ -88,7 +91,7 @@ describe('the build', () => {
 			build: {
 				outDir: 'dist',
 				minify: false,
-				lib: { entry: join(root, 'main.js'), formats: ['es'] },
+				lib: { entry: join(root, importer), formats: ['es'] },
 			},
 		})
 		return readdirSync(join(root, 'dist')).map((name) =>
@@ -116,5 +119,48 @@ describe('the build', () => {
 				fr: { title: 'Titre' },
 			}),
 		).rejects.toThrow('"fr" is missing "subtitle"')
+	})
+
+	it('lets the tests and stories of the file import its strings', async () => {
+		for (const importer of ['Page.test.js', 'Page.spec.js', 'Page.stories.js']) {
+			const chunks = await buildFixture(
+				{ en: { title: 'English title' } },
+				{ importer },
+			)
+			expect(chunks.join('')).toContain('English title')
+			rmSync(root, { recursive: true, force: true })
+		}
+	})
+
+	it('fails when a different file imports the strings', async () => {
+		await expect(
+			buildFixture({ en: { title: 'Title' } }, { importer: 'Other.js' }),
+		).rejects.toThrow(
+			'Only Page.*, Page.test.*, Page.spec.*, Page.stories.* in the same folder can import it',
+		)
+	})
+
+	it('fails for a dynamic import from a different file', async () => {
+		await expect(
+			buildFixture(
+				{ en: { title: 'Title' } },
+				{
+					importer: 'Other.js',
+					code: "import('./Page.i18n.json').then(console.log)",
+				},
+			),
+		).rejects.toThrow('cannot import')
+	})
+
+	it('fails for a file that re-exports the strings of a different file', async () => {
+		await expect(
+			buildFixture(
+				{ en: { title: 'Title' } },
+				{
+					importer: 'strings.js',
+					code: "export { default } from './Page.i18n.json'",
+				},
+			),
+		).rejects.toThrow('cannot import')
 	})
 })

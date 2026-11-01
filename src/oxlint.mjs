@@ -11,7 +11,11 @@
  * - `static-keys`: the key given to `t()` (from `useI18n`), `translate()` or
  *   `<Trans i18nKey>` is a string literal, so tools can find every key.
  * - `colocated-messages`: a file imports only its own strings, `Name.i18n.json`
- *   next to `Name.tsx`, as with CSS Modules.
+ *   next to `Name.tsx`, as with CSS Modules. Tests and stories
+ *   (`Name.test.tsx`, `Name.spec.tsx`, `Name.stories.tsx`) can import them
+ *   too. A dynamic import or a re-export of a `.i18n.json` file is reported,
+ *   because it lets other files read the strings. The Vite plugin also fails
+ *   the build for an import from a different file.
  * - `no-messages-access`: the imported strings go only to `useI18n`,
  *   `translate` or `<Trans messages>`. At runtime the import is not the JSON, so `messages.en.title`
  *   is `undefined`.
@@ -135,15 +139,25 @@ const staticKeys = {
 	},
 }
 
+const IMPORTER_SUFFIX = /\.(?:test|spec|stories)$/
+
 const colocatedMessages = {
 	meta: { type: 'problem' },
 	create(context) {
 		const filename = context.filename ?? context.getFilename()
-		const baseName = filename
+		// `Page` for `Page.tsx`, `Page.test.tsx` and `Page.stories.tsx`.
+		const ownerName = filename
 			.split(/[\\/]/)
 			.pop()
 			.replace(/\.[^.]+$/, '')
-		const expected = `./${baseName}${FILE_SUFFIX}`
+			.replace(IMPORTER_SUFFIX, '')
+		const expected = `./${ownerName}${FILE_SUFFIX}`
+		const reportReExport = (node) =>
+			context.report({
+				node: node.source,
+				message:
+					'Do not export a .i18n.json file. Other files could then read its strings.',
+			})
 		return {
 			ImportDeclaration(node) {
 				if (!isI18nJsonImport(node) || node.source.value === expected) return
@@ -151,6 +165,29 @@ const colocatedMessages = {
 					node: node.source,
 					message: `Import only the strings of this file, from '${expected}'. To use the same text in a different file, put it in that file's own .i18n.json file.`,
 				})
+			},
+			ImportExpression(node) {
+				const source = node.source
+				const isI18nJson =
+					(source.type === 'Literal' &&
+						typeof source.value === 'string' &&
+						source.value.endsWith(FILE_SUFFIX)) ||
+					(source.type === 'TemplateLiteral' &&
+						source.quasis.some((quasi) =>
+							quasi.value.raw.includes(FILE_SUFFIX),
+						))
+				if (!isI18nJson) return
+				context.report({
+					node: source,
+					message:
+						'Do not import a .i18n.json file with import(). Import the strings of this file with a static import.',
+				})
+			},
+			ExportNamedDeclaration(node) {
+				if (node.source && isI18nJsonImport(node)) reportReExport(node)
+			},
+			ExportAllDeclaration(node) {
+				if (isI18nJsonImport(node)) reportReExport(node)
 			},
 		}
 	},

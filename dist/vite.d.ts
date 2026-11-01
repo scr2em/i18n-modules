@@ -13,6 +13,10 @@ import { type Plugin } from 'vite';
  *   with the code that uses them.
  * - Every other language goes to its own chunk, which loads only when the user
  *   uses that language.
+ * - Only the file with the same name in the same folder can import it:
+ *   `Page.i18n.json` is for `Page.tsx`, and for its tests and stories
+ *   (`Page.test.tsx`, `Page.spec.tsx`, `Page.stories.tsx`). An import from a
+ *   different file fails the dev server (error overlay) and the build.
  * - Every language must have the same keys as the default language. A missing
  *   or extra key fails the dev server (error overlay) and the build. Plural
  *   forms (`_one`, `_other`, …) can differ, because languages have different
@@ -29,5 +33,7 @@ export declare function i18nModules({ runtime, defaultLanguage, }?: {
 type Messages = {
     [key: string]: string | Messages;
 };
+/** The names of the files that can import `file`, without their extension. */
+export declare function allowedImporters(file: string): string[];
 export declare function findKeyProblems(languages: Record<string, Messages>, defaultLanguage: string): string[];
 export {};

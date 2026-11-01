@@ -48,6 +48,21 @@ export default defineConfig({
 })
 ```
 
+### Who can import a strings file
+
+Only these files, in the same folder, can import `Page.i18n.json`:
+
+- `Page.tsx` (or `.ts`, `.jsx`, `.js`)
+- its tests: `Page.test.tsx`, `Page.spec.tsx`
+- its stories: `Page.stories.tsx`
+
+An import from any other file fails the dev server and the build. This is
+also true for a dynamic `import()` and for a file that re-exports the strings.
+To use the same text in a different file, put it in that file's own
+`.i18n.json` file.
+
+### Default language
+
 The default language is `en`. To use a different one, give
 `i18nModules({ defaultLanguage: 'fr' })`.
 
@@ -86,7 +101,7 @@ Add the plugin and its rules to `.oxlintrc.json`:
 | Rule                 | What it checks                                                                                                         |
 | -------------------- | ---------------------------------------------------------------------------------------------------------------------- |
 | `static-keys`        | The key given to `t()` or `translate()` is a string literal, so tools can find every key.                              |
-| `colocated-messages` | `Name.tsx` imports only `./Name.i18n.json`. A file cannot read the strings of a different file.                        |
+| `colocated-messages` | `Name.tsx` imports only `./Name.i18n.json`. Its tests and stories can import it too. A dynamic import or a re-export of a `.i18n.json` file is reported. |
 | `no-messages-access` | The imported strings go only to `useI18n()` or `translate()`. At runtime the import is not the JSON, so `messages.en` is `undefined`. |
 
 ## 4. Write a component
