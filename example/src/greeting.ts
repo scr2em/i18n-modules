@@ -1,6 +1,6 @@
 import { type TranslateFunction, useI18n } from '@scr2em/i18n-modules'
 
-import messages from './greeting.i18n.json'
+import messages from './greeting.i18n'
 
 /** The `t` of this file's strings. The component that calls `greetingFor`
  *  reads it with this hook, so it re-renders when the language changes. */

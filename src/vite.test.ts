@@ -110,6 +110,11 @@ describe('findKeyProblems', () => {
 	})
 })
 
+/** The source of a `.i18n.ts` file with these strings. */
+function stringsFile(strings: object) {
+	return `import { defineMessages } from '@scr2em/i18n-modules'\n\nexport default defineMessages(${JSON.stringify(strings)})\n`
+}
+
 describe('the build', () => {
 	let root = ''
 
@@ -121,11 +126,11 @@ describe('the build', () => {
 		file: object,
 		{
 			importer = 'Page.js',
-			code = "import messages from './Page.i18n.json'\nconsole.log(messages)",
+			code = "import messages from './Page.i18n.ts'\nconsole.log(messages)",
 		} = {},
 	) {
 		root = mkdtempSync(join(tmpdir(), 'i18n-modules-'))
-		writeFileSync(join(root, 'Page.i18n.json'), JSON.stringify(file))
+		writeFileSync(join(root, 'Page.i18n.ts'), stringsFile(file))
 		writeFileSync(
 			join(root, 'runtime.js'),
 			'export const registerI18nModule = (...args) => args',
@@ -194,7 +199,7 @@ describe('the build', () => {
 				{ en: { title: 'Title' } },
 				{
 					importer: 'Other.js',
-					code: "import('./Page.i18n.json').then(console.log)",
+					code: "import('./Page.i18n.ts').then(console.log)",
 				},
 			),
 		).rejects.toThrow('cannot import')
@@ -206,7 +211,7 @@ describe('the build', () => {
 				{ en: { title: 'Title' } },
 				{
 					importer: 'strings.js',
-					code: "export { default } from './Page.i18n.json'",
+					code: "export { default } from './Page.i18n.ts'",
 				},
 			),
 		).rejects.toThrow('cannot import')
@@ -215,8 +220,8 @@ describe('the build', () => {
 	it('loads the strings in a dev server, which resolves the watched files', async () => {
 		root = mkdtempSync(join(tmpdir(), 'i18n-modules-'))
 		writeFileSync(
-			join(root, 'Page.i18n.json'),
-			JSON.stringify({ en: { title: 'Title' } }),
+			join(root, 'Page.i18n.ts'),
+			stringsFile({ en: { title: 'Title' } }),
 		)
 		writeFileSync(
 			join(root, 'runtime.js'),
@@ -224,7 +229,7 @@ describe('the build', () => {
 		)
 		writeFileSync(
 			join(root, 'Page.js'),
-			"import messages from './Page.i18n.json'\nexport default messages",
+			"import messages from './Page.i18n.ts'\nexport default messages",
 		)
 		const server = await createServer({
 			configFile: false,
@@ -239,5 +244,32 @@ describe('the build', () => {
 		} finally {
 			await server.close()
 		}
+	})
+
+	it('resolves an import with no extension', async () => {
+		const chunks = await buildFixture(
+			{ en: { title: 'English title' } },
+			{ code: "import messages from './Page.i18n'\nconsole.log(messages)" },
+		)
+		expect(chunks.join('')).toContain('English title')
+	})
+
+	it('fails for strings that are not literals', async () => {
+		root = mkdtempSync(join(tmpdir(), 'i18n-modules-'))
+		writeFileSync(
+			join(root, 'Page.i18n.ts'),
+			"const title = 'Title'\nexport default defineMessages({ en: { title } })\n",
+		)
+		writeFileSync(join(root, 'runtime.js'), 'export const registerI18nModule = () => 0')
+		writeFileSync(join(root, 'Page.js'), "import messages from './Page.i18n.ts'\nconsole.log(messages)")
+		await expect(
+			build({
+				configFile: false,
+				root,
+				logLevel: 'silent',
+				plugins: [i18nModules({ runtime: 'runtime.js' })],
+				build: { outDir: 'dist', lib: { entry: join(root, 'Page.js'), formats: ['es'] } },
+			}),
+		).rejects.toThrow('string literals only')
 	})
 })

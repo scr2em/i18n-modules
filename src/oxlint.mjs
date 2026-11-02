@@ -10,10 +10,10 @@
  *
  * - `static-keys`: the key given to `t()` (from `useI18n`) or
  *   `<Trans i18nKey>` is a string literal, so tools can find every key.
- * - `colocated-messages`: a file imports only its own strings, `Name.i18n.json`
+ * - `colocated-messages`: a file imports only its own strings, `Name.i18n.ts`
  *   next to `Name.tsx`, as with CSS Modules. Tests and stories
  *   (`Name.test.tsx`, `Name.spec.tsx`, `Name.stories.tsx`) can import them
- *   too. A dynamic import or a re-export of a `.i18n.json` file is reported,
+ *   too. A dynamic import or a re-export of a `.i18n.ts` file is reported,
  *   because it lets other files read the strings. The Vite plugin also fails
  *   the build for an import from a different file.
  * - `no-messages-access`: the imported strings go only to `useI18n`,
@@ -21,7 +21,9 @@
  *   is `undefined`.
  */
 
-const FILE_SUFFIX = '.i18n.json'
+/** `./Page.i18n.ts`, or `./Page.i18n` with no extension. */
+const isStringsPath = (value) =>
+	typeof value === 'string' && (value.endsWith('.i18n.ts') || value.endsWith('.i18n'))
 const PACKAGE = '@scr2em/i18n-modules'
 
 function isStringLiteral(node) {
@@ -31,11 +33,8 @@ function isStringLiteral(node) {
 	)
 }
 
-function isI18nJsonImport(node) {
-	return (
-		typeof node.source.value === 'string' &&
-		node.source.value.endsWith(FILE_SUFFIX)
-	)
+function isStringsImport(node) {
+	return isStringsPath(node.source.value)
 }
 
 /** The local names of `useI18n` and `Trans` imported from the package. */
@@ -148,43 +147,47 @@ const colocatedMessages = {
 			.pop()
 			.replace(/\.[^.]+$/, '')
 			.replace(IMPORTER_SUFFIX, '')
-		const expected = `./${ownerName}${FILE_SUFFIX}`
+		const expected = `./${ownerName}.i18n`
 		const reportReExport = (node) =>
 			context.report({
 				node: node.source,
 				message:
-					'Do not export a .i18n.json file. Other files could then read its strings.',
+					'Do not export a .i18n.ts file. Other files could then read its strings.',
 			})
 		return {
 			ImportDeclaration(node) {
-				if (!isI18nJsonImport(node) || node.source.value === expected) return
+				if (
+					!isStringsImport(node) ||
+					node.source.value === expected ||
+					node.source.value === `${expected}.ts`
+				) {
+					return
+				}
 				context.report({
 					node: node.source,
-					message: `Import only the strings of this file, from '${expected}'. To use the same text in a different file, put it in that file's own .i18n.json file.`,
+					message: `Import only the strings of this file, from '${expected}'. To use the same text in a different file, put it in that file's own .i18n.ts file.`,
 				})
 			},
 			ImportExpression(node) {
 				const source = node.source
 				const isI18nJson =
-					(source.type === 'Literal' &&
-						typeof source.value === 'string' &&
-						source.value.endsWith(FILE_SUFFIX)) ||
+					(source.type === 'Literal' && isStringsPath(source.value)) ||
 					(source.type === 'TemplateLiteral' &&
 						source.quasis.some((quasi) =>
-							quasi.value.raw.includes(FILE_SUFFIX),
+							quasi.value.raw.includes('.i18n'),
 						))
 				if (!isI18nJson) return
 				context.report({
 					node: source,
 					message:
-						'Do not import a .i18n.json file with import(). Import the strings of this file with a static import.',
+						'Do not import a .i18n.ts file with import(). Import the strings of this file with a static import.',
 				})
 			},
 			ExportNamedDeclaration(node) {
-				if (node.source && isI18nJsonImport(node)) reportReExport(node)
+				if (node.source && isStringsImport(node)) reportReExport(node)
 			},
 			ExportAllDeclaration(node) {
-				if (isI18nJsonImport(node)) reportReExport(node)
+				if (isStringsImport(node)) reportReExport(node)
 			},
 		}
 	},
@@ -201,7 +204,7 @@ const noMessagesAccess = {
 				for (const statement of node.body) {
 					if (
 						statement.type !== 'ImportDeclaration' ||
-						!isI18nJsonImport(statement)
+						!isStringsImport(statement)
 					) {
 						continue
 					}
@@ -211,7 +214,7 @@ const noMessagesAccess = {
 						} else {
 							context.report({
 								node: specifier,
-								message: 'Import the .i18n.json file as a default import.',
+								message: 'Import the .i18n.ts file as a default import.',
 							})
 						}
 					}

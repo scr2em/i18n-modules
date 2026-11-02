@@ -53,6 +53,27 @@ export function useI18n<Tree extends Messages>(source: I18nMessages<Tree>) {
 }
 
 /**
+ * Declares the strings of a `Name.i18n.ts` file, one object per language:
+ *
+ *   export default defineMessages({
+ *     en: { title: 'Files', unread_one: '{{count}} message' },
+ *     fr: { title: 'Fichiers', unread_one: '{{count}} message' },
+ *   })
+ *
+ * The `const` type parameter keeps the exact text of each string, so `t()`
+ * types its keys, `{{values}}` and tags with no generated files. The Vite
+ * plugin reads the object at build time and replaces the module, so it must
+ * be a literal. Outside Vite (a Node script), this returns the object as is.
+ */
+export function defineMessages<
+	const Source extends { readonly en: Messages } & {
+		readonly [language: string]: Messages
+	},
+>(source: Source): I18nMessages<Source['en']> {
+	return source as unknown as I18nMessages<Source['en']>
+}
+
+/**
  * Renders a string that has tags, with React elements in place of the tags:
  *
  *   // "terms": "I accept the <link>terms</link>.<br/>Thank you, {{name}}."

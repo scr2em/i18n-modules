@@ -1,7 +1,7 @@
 import { I18nProvider, Trans, useI18n } from '@scr2em/i18n-modules'
 import { Suspense } from 'react'
 
-import messages from './App.i18n.json'
+import messages from './App.i18n'
 import { greetingFor, useGreetingTranslation } from './greeting.ts'
 import { Inbox } from './Inbox.tsx'
 import { LanguagePicker } from './LanguagePicker.tsx'

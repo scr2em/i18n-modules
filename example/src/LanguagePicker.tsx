@@ -1,6 +1,6 @@
 import { setLanguage, useI18n } from '@scr2em/i18n-modules'
 
-import messages from './LanguagePicker.i18n.json'
+import messages from './LanguagePicker.i18n'
 
 export function LanguagePicker() {
 	const { t, language } = useI18n(messages)
@@ -20,7 +20,10 @@ export function LanguagePicker() {
 				}}
 			>
 				{languages.map((option) => (
-					<option key={option.code} value={option.code}>
+					<option
+						key={option.code}
+						value={option.code}
+					>
 						{option.label}
 					</option>
 				))}

@@ -2,7 +2,7 @@
 
 Scoped i18n strings for React and Vite, like CSS Modules.
 
-Each component keeps its strings in its own `Name.i18n.json` file, next to
+Each component keeps its strings in its own `Name.i18n.ts` file, next to
 `Name.tsx`. The namespace comes from the file path, so two files never share
 keys. Two people who add strings to different components never get a merge
 conflict in one big translation file.
@@ -23,8 +23,7 @@ conflict in one big translation file.
 
 - React 19 or later
 - Vite 6 or later
-- TypeScript 5.0 or later, with `resolveJsonModule` and
-  `allowArbitraryExtensions` (for typed keys and values)
+- TypeScript 5.0 or later (for the `const` type parameter of `defineMessages`)
 
 ## 1. Install
 
@@ -52,7 +51,7 @@ export default defineConfig({
 
 ### Who can import a strings file
 
-Only these files, in the same folder, can import `Page.i18n.json`:
+Only these files, in the same folder, can import `Page.i18n.ts`:
 
 - `Page.tsx` (or `.ts`, `.jsx`, `.js`)
 - its tests: `Page.test.tsx`, `Page.spec.tsx`
@@ -61,7 +60,7 @@ Only these files, in the same folder, can import `Page.i18n.json`:
 An import from any other file fails the dev server and the build. This is
 also true for a dynamic `import()` and for a file that re-exports the strings.
 To use the same text in a different file, put it in that file's own
-`.i18n.json` file.
+`.i18n.ts` file.
 
 ### Default language
 
@@ -71,45 +70,15 @@ The default language is `en`. To use a different one, give
 
 ### Typed keys and values
 
-The plugin writes a `Name.i18n.d.json.ts` file next to each `Name.i18n.json`
-file. It has the exact text of each string in the default language.
-TypeScript reads it in place of the JSON, so the type check knows the
-`{{values}}` and the tags of every string.
+Nothing is generated. TypeScript reads the strings file itself:
+`defineMessages` keeps the exact text of each string, so `t()` autocompletes
+the keys and the `{{values}}` of each string, and `<Trans>` checks its tags,
+in the editor and in `tsc`.
 
-1. Add these options to `tsconfig.json`:
-
-   ```json
-   {
-   	"compilerOptions": {
-   		"resolveJsonModule": true,
-   		"allowArbitraryExtensions": true
-   	}
-   }
-   ```
-
-2. Ignore the generated files in `.gitignore`:
-
-   ```gitignore
-   *.i18n.d.json.ts
-   ```
-
-3. Write the files before `tsc` runs where no Vite server runs, for example
-   in CI:
-
-   ```json
-   {
-   	"scripts": {
-   		"typecheck": "i18n-modules generate src && tsc --noEmit"
-   	}
-   }
-   ```
-
-   In dev, the plugin updates the files when a `.i18n.json` file changes.
-   `vite build` also writes them. To turn this off, give
-   `i18nModules({ declarations: false })`.
-
-Without the generated files, TypeScript types the import as plain JSON, and
-`useI18n` does not accept it.
+The strings must be literals: keys, nested objects and strings. The plugin
+reads them at build time to put each language in its own chunk, so a
+variable, a spread or a template literal with `${…}` fails the build with
+the line of the problem.
 
 ## 3. Add the oxlint rules
 
@@ -135,33 +104,35 @@ Add the plugin and its rules to `.oxlintrc.json`:
 | Rule                 | What it checks                                                                                                         |
 | -------------------- | ---------------------------------------------------------------------------------------------------------------------- |
 | `static-keys`        | The key given to `t()` or `<Trans i18nKey>` is a string literal, so tools can find every key.                          |
-| `colocated-messages` | `Name.tsx` imports only `./Name.i18n.json`. Its tests and stories can import it too. A dynamic import or a re-export of a `.i18n.json` file is reported. |
+| `colocated-messages` | `Name.tsx` imports only `./Name.i18n`. Its tests and stories can import it too. A dynamic import or a re-export of a `.i18n.ts` file is reported. |
 | `no-messages-access` | The imported strings go only to `useI18n()`, `<Trans messages>` or `typeof` in a type. At runtime the import is not the JSON, so `messages.en` is `undefined`. |
 
 ## 4. Write a component
 
 Put the strings next to the component, with one object for each language.
 
-`Inbox.i18n.json`:
+`Inbox.i18n.ts`:
 
-```json
-{
-	"en": {
-		"heading": "Inbox of {{name}}",
-		"unread_zero": "No unread messages",
-		"unread_one": "{{count}} unread message",
-		"unread_other": "{{count}} unread messages",
-		"clear": "Clear"
+```ts
+import { defineMessages } from '@scr2em/i18n-modules'
+
+export default defineMessages({
+	en: {
+		heading: 'Inbox of {{name}}',
+		unread_zero: 'No unread messages',
+		unread_one: '{{count}} unread message',
+		unread_other: '{{count}} unread messages',
+		clear: 'Clear',
 	},
-	"fr": {
-		"heading": "Boîte de réception de {{name}}",
-		"unread_zero": "Aucun message non lu",
-		"unread_one": "{{count}} message non lu",
-		"unread_many": "{{count}} de messages non lus",
-		"unread_other": "{{count}} messages non lus",
-		"clear": "Effacer"
-	}
-}
+	fr: {
+		heading: 'Boîte de réception de {{name}}',
+		unread_zero: 'Aucun message non lu',
+		unread_one: '{{count}} message non lu',
+		unread_many: '{{count}} de messages non lus',
+		unread_other: '{{count}} messages non lus',
+		clear: 'Effacer',
+	},
+})
 ```
 
 `Inbox.tsx`:
@@ -170,7 +141,7 @@ Put the strings next to the component, with one object for each language.
 import { useI18n } from '@scr2em/i18n-modules'
 import { useState } from 'react'
 
-import messages from './Inbox.i18n.json'
+import messages from './Inbox.i18n'
 
 export function Inbox({ name }: { name: string }) {
 	const { t } = useI18n(messages)
@@ -200,7 +171,7 @@ export function Inbox({ name }: { name: string }) {
 
 ### Language tags
 
-The keys of a `.i18n.json` file are BCP 47 tags with an ISO 639 language:
+The language keys of a strings file are BCP 47 tags with an ISO 639 language:
 `en`, `fr`, `pt-BR` (ISO 3166 region), `zh-Hant-TW` (ISO 15924 script and a
 region).
 
@@ -214,12 +185,22 @@ region).
   `pt-BR` needs every key, as any other language does.
 - `setLanguage('pt-br')` and `<I18nProvider language="pt-br">` use `pt-BR`.
 
-```json
-{
-	"en": { "title": "Settings", "color": "Color" },
-	"pt": { "title": "Configurações", "color": "Cor" },
-	"pt-BR": { "color": "Cor do tema" }
-}
+```ts
+import { defineMessages } from '@scr2em/i18n-modules'
+
+export default defineMessages({
+	en: {
+		title: 'Settings',
+		color: 'Color',
+	},
+	pt: {
+		title: 'Configurações',
+		color: 'Cor',
+	},
+	'pt-BR': {
+		color: 'Cor do tema',
+	},
+})
 ```
 
 ### Change the language
@@ -230,7 +211,7 @@ Then it re-renders, so the page never shows two languages at the same time.
 ```tsx
 import { setLanguage, useI18n } from '@scr2em/i18n-modules'
 
-import messages from './LanguagePicker.i18n.json'
+import messages from './LanguagePicker.i18n'
 
 export function LanguagePicker() {
 	const { t, language } = useI18n(messages)
@@ -265,18 +246,20 @@ createRoot(root).render(
 Use `<Trans>` when a sentence has a link, bold text or a line break. Put tags
 in the string, and give one React element for each tag name:
 
-```json
-{
-	"en": {
-		"terms": "Hello {{name}}, please accept the <link>terms</link>.<br/>It takes <bold>one minute</bold>."
-	}
-}
+```ts
+import { defineMessages } from '@scr2em/i18n-modules'
+
+export default defineMessages({
+	en: {
+		terms: 'Hello {{name}}, please accept the <link>terms</link>.<br/>It takes <bold>one minute</bold>.',
+	},
+})
 ```
 
 ```tsx
 import { Trans } from '@scr2em/i18n-modules'
 
-import messages from './SignUp.i18n.json'
+import messages from './SignUp.i18n'
 
 export function SignUp({ name }: { name: string }) {
 	return (
@@ -352,7 +335,7 @@ that `t`, and the component that calls the helper uses it:
 import { type TranslateFunction, useI18n } from '@scr2em/i18n-modules'
 import { z } from 'zod'
 
-import messages from './signUpSchema.i18n.json'
+import messages from './signUpSchema.i18n'
 
 export const useSignUpSchemaTranslation = () => useI18n(messages).t
 
@@ -408,7 +391,7 @@ in `t()` wins over the default value.
 ## Example project
 
 `example/` is a small Vite + React app that uses the package. It has
-components with their own `.i18n.json` files, a language picker (English,
+components with their own `.i18n.ts` files, a language picker (English,
 French, Arabic), plurals, `<Trans>`, a French preview with `<I18nProvider>`,
 and a helper that takes the `t` of its own strings.
 

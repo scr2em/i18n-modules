@@ -1,7 +1,7 @@
 import { useI18n } from '@scr2em/i18n-modules'
 import { useState } from 'react'
 
-import messages from './Inbox.i18n.json'
+import messages from './Inbox.i18n'
 
 export function Inbox() {
 	const { t } = useI18n(messages)
@@ -17,7 +17,10 @@ export function Inbox() {
 			>
 				{t('add')}
 			</button>{' '}
-			<button type="button" onClick={() => setUnreadCount(0)}>
+			<button
+				type="button"
+				onClick={() => setUnreadCount(0)}
+			>
 				{t('clear')}
 			</button>
 		</section>

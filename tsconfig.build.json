@@ -8,5 +8,5 @@
 		"rootDir": "src",
 		"outDir": "dist"
 	},
-	"include": ["src/index.ts", "src/vite.ts", "src/cli.ts", "src/declarations.ts"]
+	"include": ["src/index.ts", "src/vite.ts", "src/strings.ts"]
 }

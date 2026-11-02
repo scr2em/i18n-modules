@@ -11,7 +11,7 @@ const ruleTester = new RuleTester({
 })
 
 const imports = `import { Trans, type TranslateFunction, useI18n } from '@scr2em/i18n-modules'
-import messages from './Page.i18n.json'
+import messages from './Page.i18n'
 `
 
 ruleTester.run('static-keys', plugin.rules['static-keys'], {
@@ -52,56 +52,60 @@ ruleTester.run('static-keys', plugin.rules['static-keys'], {
 ruleTester.run('colocated-messages', plugin.rules['colocated-messages'], {
 	valid: [
 		{
-			code: `import messages from './Page.i18n.json'`,
+			code: `import messages from './Page.i18n'`,
 			filename: '/app/src/Page.tsx',
 		},
 		{ code: `import data from './data.json'`, filename: '/app/src/Page.tsx' },
 		{
-			code: `import messages from './Page.i18n.json'`,
+			code: `import messages from './Page.i18n'`,
 			filename: '/app/src/Page.test.tsx',
 		},
 		{
-			code: `import messages from './Page.i18n.json'`,
+			code: `import messages from './Page.i18n'`,
 			filename: '/app/src/Page.spec.ts',
 		},
 		{
-			code: `import messages from './Page.i18n.json'`,
+			code: `import messages from './Page.i18n'`,
 			filename: '/app/src/Page.stories.tsx',
+		},
+		{
+			code: `import messages from './Page.i18n.ts'`,
+			filename: '/app/src/Page.tsx',
 		},
 	],
 	invalid: [
 		{
-			code: `import messages from './Other.i18n.json'`,
+			code: `import messages from './Other.i18n'`,
 			filename: '/app/src/Page.tsx',
-			errors: [/'\.\/Page\.i18n\.json'/],
+			errors: [/'\.\/Page\.i18n'/],
 		},
 		{
-			code: `import messages from '../shared/Page.i18n.json'`,
+			code: `import messages from '../shared/Page.i18n'`,
 			filename: '/app/src/Page.tsx',
-			errors: [/'\.\/Page\.i18n\.json'/],
+			errors: [/'\.\/Page\.i18n'/],
 		},
 		{
-			code: `import messages from './Other.i18n.json'`,
+			code: `import messages from './Other.i18n'`,
 			filename: '/app/src/Page.test.tsx',
-			errors: [/'\.\/Page\.i18n\.json'/],
+			errors: [/'\.\/Page\.i18n'/],
 		},
 		{
-			code: `const messages = import('./Page.i18n.json')`,
+			code: `const messages = import('./Page.i18n')`,
 			filename: '/app/src/Page.tsx',
 			errors: [/import\(\)/],
 		},
 		{
-			code: 'const messages = import(`./${name}.i18n.json`)',
+			code: 'const messages = import(`./${name}.i18n`)',
 			filename: '/app/src/Page.tsx',
 			errors: [/import\(\)/],
 		},
 		{
-			code: `export { default } from './Page.i18n.json'`,
+			code: `export { default } from './Page.i18n'`,
 			filename: '/app/src/Page.tsx',
 			errors: [/Do not export/],
 		},
 		{
-			code: `export * from './Page.i18n.json'`,
+			code: `export * from './Page.i18n'`,
 			filename: '/app/src/Page.tsx',
 			errors: [/Do not export/],
 		},
@@ -126,7 +130,7 @@ ruleTester.run('no-messages-access', plugin.rules['no-messages-access'], {
 			errors: [/only to useI18n/],
 		},
 		{
-			code: `import { en } from './Page.i18n.json'`,
+			code: `import { en } from './Page.i18n'`,
 			errors: [/default import/],
 		},
 	],
