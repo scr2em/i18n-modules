@@ -15,7 +15,8 @@ conflict in one big translation file.
 - Plurals use `Intl.PluralRules`.
 - `<Trans>` puts React elements, such as links, inside a translated sentence.
 - No provider is necessary. Add `<I18nProvider>` only to give a subtree a
-  different language.
+  different language, and `<I18nOverrides>` only to replace strings at
+  runtime.
 - The build fails when two languages of a file have different keys.
 - An oxlint plugin keeps keys static and strings scoped.
 
@@ -319,6 +320,44 @@ export function EmailPreview({ readerLanguage }: { readerLanguage: string }) {
   while its strings load. Its own `<Suspense>` keeps the rest of the page on
   the screen. To keep the old text on the screen while the new strings load,
   change `language` in `startTransition`.
+
+### Override strings at runtime with `<I18nOverrides>`
+
+To replace some strings at runtime, for example with text that a customer
+edited and the app fetches, wrap a subtree in `<I18nOverrides>`:
+
+```tsx
+import { I18nOverrides } from '@scr2em/i18n-modules'
+
+import pageMessages from './Page.i18n.ts'
+
+export function CustomerPage() {
+	const { data } = useQuery(customerCopyQuery)
+
+	return (
+		<I18nOverrides messages={pageMessages} strings={data?.page}>
+			<Page />
+		</I18nOverrides>
+	)
+}
+```
+
+- `strings` has only the keys it changes, with the same paths as the file.
+  The other keys come from the file. A plural form is a separate key: an
+  override of `items_other` leaves `items_one` as it is.
+- Until `strings` arrives (`undefined`), the file's text shows. There is no
+  loading state.
+- Without `language`, the strings are for every language. With
+  `language="fr"`, they are only for French and its regional tags (`fr-CA`).
+- `strings` is typed as a partial of the file's strings, so a wrong key in
+  code fails the type check. Remote text is not checked at build time: in
+  development, a key that the file does not have, and a `{{name}}` that the
+  original text does not have, are reported with `console.warn`.
+- For several files, nest providers. An inner override wins, and each
+  override applies only to its own file.
+- `t` stays the same while `strings` is the same object (as with query data),
+  so effects and memos that depend on it do not run again.
+- `<Trans>` uses the override too, with its tags.
 
 ### Strings in helpers (schemas, columns, options)
 

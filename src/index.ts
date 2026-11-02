@@ -7,6 +7,7 @@ import {
 	type ReactNode,
 	use,
 	useContext,
+	useMemo,
 	useSyncExternalStore,
 } from 'react'
 
@@ -39,14 +40,19 @@ import {
  * them before it switches, so a component never shows two languages.
  */
 export function useI18n<Tree extends Messages>(source: I18nMessages<Tree>) {
-	const { module, language } = useModule(source)
-	// The same `t` for the same file and language, so it is safe in the
-	// dependencies of effects and memos, and the React Compiler can keep its
-	// memoized values.
-	let translator = module.translators.get(language)
+	const { module, language, overrides } = useModule(source)
+	// The same `t` for the same file, language and overrides, so it is safe in
+	// the dependencies of effects and memos, and the React Compiler can keep
+	// its memoized values.
+	const translators = overrides
+		? (overrideTranslators.get(overrides) ??
+			overrideTranslators.set(overrides, new Map()).get(overrides)!)
+		: module.translators
+	let translator = translators.get(language)
 	if (!translator) {
-		translator = (key, values) => format(module, language, key, values)
-		module.translators.set(language, translator)
+		translator = (key, values) =>
+			format(module, language, key, values, overrides)
+		translators.set(language, translator)
 	}
 	const t = translator as unknown as TranslateFunction<I18nMessages<Tree>>
 	return { t, language }
@@ -97,9 +103,11 @@ export function defineMessages<
 export function Trans<Tree extends Messages>(
 	props: TransProps<Tree>,
 ): ReactNode {
-	const { module, language } = useModule(props.messages)
+	const { module, language, overrides } = useModule(props.messages)
 	const values = 'values' in props ? props.values : undefined
-	const nodes = parseTags(templateOf(module, language, props.i18nKey, values))
+	const nodes = parseTags(
+		templateOf(module, language, props.i18nKey, values, overrides),
+	)
 	return createElement(
 		Fragment,
 		null,
@@ -150,6 +158,63 @@ export function I18nProvider({
 	children?: ReactNode
 }): ReactNode {
 	return createElement(LanguageContext.Provider, { value: language }, children)
+}
+
+/**
+ * Replaces some strings of one strings file in a subtree, for example with
+ * text that a customer edited and the app fetches at runtime:
+ *
+ *   const { data } = useQuery(customerCopyQuery)
+ *   <I18nOverrides messages={pageMessages} strings={data?.page}>
+ *     <Page />
+ *   </I18nOverrides>
+ *
+ * - `strings` has only the keys it changes (plural forms are separate keys,
+ *   as in the file). The others come from the file. Until it arrives
+ *   (`undefined`), the file's text shows.
+ * - Without `language` the strings are for every language. With it, only for
+ *   that language and its regional tags (`pt` also covers `pt-BR`).
+ * - For several files, nest providers. An inner override wins.
+ * - Remote text is not checked at build time. In development, a key that the
+ *   file does not have, or a `{{name}}` that the file's text does not have,
+ *   is reported with `console.warn`.
+ * - `t` stays the same while `strings` is the same object (as with query
+ *   data), so effects and memos that depend on it do not run again.
+ */
+export function I18nOverrides<Tree extends Messages>({
+	messages,
+	strings,
+	language,
+	children,
+}: {
+	messages: I18nMessages<Tree>
+	strings: Overrides<Tree> | null | undefined
+	language?: string
+	children?: ReactNode
+}): ReactNode {
+	const parent = useContext(OverridesContext)
+	const namespace = namespaceOf(messages)
+	const value = useMemo(() => {
+		if (!strings) {
+			return parent
+		}
+		warnAboutOverrides(namespace, strings as Messages)
+		const entry: OverrideEntry = {
+			strings: strings as Messages,
+			language: language === undefined ? undefined : canonicalTag(language),
+		}
+		const next = new Map(parent)
+		next.set(namespace, [entry, ...(parent.get(namespace) ?? [])])
+		return next
+	}, [parent, namespace, strings, language])
+	return createElement(OverridesContext.Provider, { value }, children)
+}
+
+/** Some strings of a strings file, with any text. */
+export type Overrides<Tree> = {
+	readonly [Key in keyof Tree]?: Tree[Key] extends string
+		? string
+		: Overrides<Tree[Key]>
 }
 
 /**
@@ -316,8 +381,11 @@ type Trim<Text extends string> = Text extends ` ${infer Rest}`
 /** The names in `{{name}}` (or `{{name, format}}`) in `Text`. */
 type PlaceholderNames<Text extends string> =
 	Text extends `${string}{{${infer Placeholder}}}${infer Rest}`
-		? Trim<Placeholder extends `${infer Name},${string}` ? Name : Placeholder>
-			| PlaceholderNames<Rest>
+		?
+				| Trim<
+						Placeholder extends `${infer Name},${string}` ? Name : Placeholder
+				  >
+				| PlaceholderNames<Rest>
 		: never
 
 /** The names of the opening and self-closing tags in `Text`: `link` for
@@ -334,7 +402,10 @@ type TagName<Tag extends string> = Tag extends `/${string}` | ` ${string}`
 		: Tag
 
 /** The text of `Key` in `Tree`, with all its plural forms. */
-type TextOf<Tree, Key extends string> = Key extends `${infer Head}.${infer Rest}`
+type TextOf<
+	Tree,
+	Key extends string,
+> = Key extends `${infer Head}.${infer Rest}`
 	? Head extends keyof Tree
 		? TextOf<Tree[Head], Rest>
 		: never
@@ -407,6 +478,19 @@ type MessageKey<Tree> = {
 const modules = new Map<string, I18nModule>()
 /** The language of the nearest `I18nProvider`, if there is one. */
 const LanguageContext = createContext<string | undefined>(undefined)
+
+type OverrideEntry = { strings: Messages; language: string | undefined }
+
+/** The overrides of each strings file (by namespace), innermost first. */
+const OverridesContext = createContext<ReadonlyMap<string, OverrideEntry[]>>(
+	new Map(),
+)
+
+/** The `t` of each language, for each list of overrides. */
+const overrideTranslators = new WeakMap<
+	OverrideEntry[],
+	Map<string, (key: string, values?: InterpolationValues) => string>
+>()
 const listeners = new Set<() => void>()
 // Replaced on every change, so `useSyncExternalStore` sees a new snapshot.
 let state = { language: 'en' }
@@ -429,6 +513,77 @@ function setState(next: { language: string }) {
 	for (const listener of listeners) {
 		listener()
 	}
+}
+
+/** The namespace of a `.i18n.ts` import. */
+function namespaceOf(source: unknown): string {
+	if (
+		typeof source === 'object' &&
+		source !== null &&
+		NAMESPACE in source &&
+		typeof source[NAMESPACE] === 'string'
+	) {
+		return source[NAMESPACE]
+	}
+	throw new Error(
+		'i18n-modules: import the .i18n.ts file in a module that Vite builds with the i18n-modules plugin',
+	)
+}
+
+// Only for `isDevelopment`: the app needs no Node types for this.
+declare const process: { env: { NODE_ENV?: string } }
+
+/** Whether this is a development build. Vite replaces `process.env.NODE_ENV`
+ *  in builds, so the checks are removed from production code. */
+function isDevelopment(): boolean {
+	try {
+		return process.env.NODE_ENV !== 'production'
+	} catch {
+		return false
+	}
+}
+
+/** In development, reports override keys that the file does not have, and
+ *  `{{names}}` that the file's text does not have (they would show as is). */
+function warnAboutOverrides(namespace: string, strings: Messages): void {
+	if (!isDevelopment()) {
+		return
+	}
+	const module = modules.get(namespace)
+	if (!module) {
+		return
+	}
+	const original = module.languages.get(module.defaultLanguage)
+	const names = (text: string) =>
+		new Set([...text.matchAll(PLACEHOLDER)].map((match) => match[1]))
+	const check = (node: Messages, base: Messages | undefined, path: string) => {
+		for (const [key, value] of Object.entries(node)) {
+			const originalValue = base?.[key]
+			if (typeof value === 'object') {
+				check(
+					value,
+					typeof originalValue === 'object' ? originalValue : undefined,
+					`${path}${key}.`,
+				)
+				continue
+			}
+			if (typeof originalValue !== 'string') {
+				console.warn(
+					`i18n-modules: ${namespace} has no string "${path}${key}". The override is not used.`,
+				)
+				continue
+			}
+			const known = names(originalValue)
+			for (const name of names(value)) {
+				if (!known.has(name)) {
+					console.warn(
+						`i18n-modules: the override of "${path}${key}" in ${namespace} has {{${name}}}, which the original text does not have. It shows as is.`,
+					)
+				}
+			}
+		}
+	}
+	check(strings, original, '')
 }
 
 function moduleOf(source: unknown): I18nModule {
@@ -520,6 +675,7 @@ function loadTag(
 function useModule(source: unknown) {
 	const current = useSyncExternalStore(subscribe, getState)
 	const providerLanguage = useContext(LanguageContext)
+	const overrides = useContext(OverridesContext).get(namespaceOf(source))
 	const language =
 		providerLanguage === undefined
 			? current.language
@@ -532,7 +688,7 @@ function useModule(source: unknown) {
 		// Wait, so the component does not show the default language first.
 		use(pending)
 	}
-	return { module, language }
+	return { module, language, overrides }
 }
 
 function format(
@@ -540,8 +696,13 @@ function format(
 	language: string,
 	key: string,
 	values?: InterpolationValues,
+	overrides?: OverrideEntry[],
 ): string {
-	return interpolate(templateOf(module, language, key, values), values, language)
+	return interpolate(
+		templateOf(module, language, key, values, overrides),
+		values,
+		language,
+	)
 }
 
 /** The string of `key`, before the values go in. */
@@ -550,7 +711,17 @@ function templateOf(
 	language: string,
 	key: string,
 	values?: InterpolationValues,
+	overrides?: OverrideEntry[],
 ): string {
+	for (const entry of overrides ?? []) {
+		if (entry.language && !fallbackTags(language).includes(entry.language)) {
+			continue
+		}
+		const text = find(entry.strings, language, key, values, false)
+		if (text !== undefined) {
+			return text
+		}
+	}
 	for (const tag of tagsToRead(module, language)) {
 		// The plural rules of the language of the text pick its plural form.
 		const text = find(module.languages.get(tag), tag, key, values)
@@ -683,6 +854,9 @@ function find(
 	language: string,
 	key: string,
 	values?: InterpolationValues,
+	/** False for overrides: only the exact plural form counts, so a partial
+	 *  override never puts its `_other` in place of the file's `_one`. */
+	otherFallback = true,
 ): string | undefined {
 	if (!messages) {
 		return undefined
@@ -703,7 +877,7 @@ function find(
 			? [
 					...(count === 0 ? [`${lastKey}_zero`] : []),
 					`${lastKey}_${new Intl.PluralRules(language).select(count)}`,
-					`${lastKey}_other`,
+					...(otherFallback ? [`${lastKey}_other`] : []),
 					lastKey,
 				]
 			: [lastKey]

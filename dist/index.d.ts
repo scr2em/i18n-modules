@@ -107,6 +107,37 @@ export declare function I18nProvider({ language, children, }: {
     children?: ReactNode;
 }): ReactNode;
 /**
+ * Replaces some strings of one strings file in a subtree, for example with
+ * text that a customer edited and the app fetches at runtime:
+ *
+ *   const { data } = useQuery(customerCopyQuery)
+ *   <I18nOverrides messages={pageMessages} strings={data?.page}>
+ *     <Page />
+ *   </I18nOverrides>
+ *
+ * - `strings` has only the keys it changes (plural forms are separate keys,
+ *   as in the file). The others come from the file. Until it arrives
+ *   (`undefined`), the file's text shows.
+ * - Without `language` the strings are for every language. With it, only for
+ *   that language and its regional tags (`pt` also covers `pt-BR`).
+ * - For several files, nest providers. An inner override wins.
+ * - Remote text is not checked at build time. In development, a key that the
+ *   file does not have, or a `{{name}}` that the file's text does not have,
+ *   is reported with `console.warn`.
+ * - `t` stays the same while `strings` is the same object (as with query
+ *   data), so effects and memos that depend on it do not run again.
+ */
+export declare function I18nOverrides<Tree extends Messages>({ messages, strings, language, children, }: {
+    messages: I18nMessages<Tree>;
+    strings: Overrides<Tree> | null | undefined;
+    language?: string;
+    children?: ReactNode;
+}): ReactNode;
+/** Some strings of a strings file, with any text. */
+export type Overrides<Tree> = {
+    readonly [Key in keyof Tree]?: Tree[Key] extends string ? string : Overrides<Tree[Key]>;
+};
+/**
  * Values that every string can use, such as display names that come from the
  * settings of a customer. A `{{name}}` with a default value does not need a
  * value in `t()`, but can still get one. Components re-render with the new
