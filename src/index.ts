@@ -540,8 +540,9 @@ function templateOf(
 	return key
 }
 
-/** `{{name}}`, or `{{name, number}}` with a format. */
-const PLACEHOLDER = /\{\{\s*(\w+)\s*(?:,\s*(\w+)\s*)?\}\}/g
+/** `{{name}}`, or `{{name, number}}` with a format. A name can have spaces
+ *  (`{{plan name}}`), as the types and i18next allow. */
+const PLACEHOLDER = /\{\{\s*([^},]+?)\s*(?:,\s*(\w+)\s*)?\}\}/g
 
 function interpolate(
 	text: string,

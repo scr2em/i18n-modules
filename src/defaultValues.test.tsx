@@ -23,6 +23,7 @@ const messages = registerI18nModule(
 		staffCount: '{{count}} {{staffName}}',
 		total: 'Total: {{count, number}}',
 		greeting: 'Hello {{name}}',
+		plan: 'The {{plan name}} plan',
 	},
 	{},
 )
@@ -63,6 +64,10 @@ describe('setDefaultValues', () => {
 })
 
 describe('values', () => {
+	it('fills a name with a space', () => {
+		expect(tFor(messages)('plan', { 'plan name': 'Gold' })).toBe('The Gold plan')
+	})
+
 	it('renders null and undefined as an empty string', () => {
 		expect(tFor(messages)('greeting', { name: undefined })).toBe('Hello ')
 		expect(tFor(messages)('greeting', { name: null })).toBe('Hello ')
