@@ -38,9 +38,9 @@ import { FILE_SUFFIX, findStringsFiles, isStringsSpecifier, readLanguages, } fro
 export function i18nModules({ runtime = RUNTIME, defaultLanguage = 'en', sharedStrings = false, } = {}) {
     let root = process.cwd();
     let isBuild = false;
-    /** The index of each unique string in the shared table, in builds with
-     *  `sharedStrings`. */
-    let tableIndex;
+    /** For each language, the index of each unique string in its shared
+     *  table, in builds with `sharedStrings`. */
+    let tables;
     return {
         name: 'i18n-modules',
         enforce: 'pre',
@@ -54,21 +54,27 @@ export function i18nModules({ runtime = RUNTIME, defaultLanguage = 'en', sharedS
                 return;
             }
             // Like Tailwind scans its content: all strings files of the project.
+            // One table for each language, which loads with that language.
             const counts = new Map();
             for (const file of findStringsFiles(root)) {
-                const messages = readLanguages(file)[defaultLanguage];
-                for (const text of leaves(messages ?? {})) {
-                    counts.set(text, (counts.get(text) ?? 0) + 1);
+                for (const [language, messages] of Object.entries(readLanguages(file))) {
+                    const languageCounts = counts.get(language) ?? new Map();
+                    for (const text of leaves(messages)) {
+                        languageCounts.set(text, (languageCounts.get(text) ?? 0) + 1);
+                    }
+                    counts.set(language, languageCounts);
                 }
             }
             // The most used strings first, so they get the shortest indexes.
-            const table = [...counts.entries()]
-                .sort(([, first], [, second]) => second - first)
-                .map(([text]) => text);
-            tableIndex = new Map(table.map((text, index) => [text, index]));
+            tables = new Map([...counts.entries()].map(([language, languageCounts]) => [
+                language,
+                new Map([...languageCounts.entries()]
+                    .sort(([, first], [, second]) => second - first)
+                    .map(([text], index) => [text, index])),
+            ]));
         },
         async resolveId(source, importer) {
-            if (source.startsWith(LANGUAGE_SPECIFIER) || source === TABLE_SPECIFIER) {
+            if (source.startsWith(LANGUAGE_SPECIFIER) || source.startsWith(TABLE_SPECIFIER)) {
                 return `\0${source}`;
             }
             if (!isStringsSpecifier(source)) {
@@ -90,9 +96,10 @@ export function i18nModules({ runtime = RUNTIME, defaultLanguage = 'en', sharedS
             return `${MODULE_ID}${resolved.id}${MODULE_ID_END}`;
         },
         load(id) {
-            if (id === `\0${TABLE_SPECIFIER}` && tableIndex) {
+            if (id.startsWith(`\0${TABLE_SPECIFIER}`) && tables) {
+                const language = id.slice(1 + TABLE_SPECIFIER.length);
                 return {
-                    code: `export default ${JSON.stringify([...tableIndex.keys()])}`,
+                    code: `export default ${JSON.stringify([...(tables.get(language)?.keys() ?? [])])}`,
                     moduleType: 'js',
                 };
             }
@@ -108,13 +115,13 @@ export function i18nModules({ runtime = RUNTIME, defaultLanguage = 'en', sharedS
                     .filter((language) => language !== defaultLanguage)
                     .map((language) => `${JSON.stringify(language)}: () => import(${JSON.stringify(`${LANGUAGE_SPECIFIER}${file}${LANGUAGE_SEPARATOR}${language}`)})`);
                 const registerArguments = `${JSON.stringify(namespaceOf(root, file))}, ${JSON.stringify(defaultLanguage)}`;
-                if (tableIndex) {
-                    const index = tableIndex;
+                if (tables) {
+                    const index = tables.get(defaultLanguage);
                     return {
                         code: [
                             `import { registerI18nModule } from ${JSON.stringify(resolve(root, runtime))}`,
-                            `import table from ${JSON.stringify(TABLE_SPECIFIER)}`,
-                            `export default registerI18nModule(${registerArguments}, ${JSON.stringify(toIndexes(languages[defaultLanguage], index))}, { ${loaders.join(', ')} }, table)`,
+                            `import t from ${JSON.stringify(TABLE_SPECIFIER + defaultLanguage)}`,
+                            `export default registerI18nModule(${registerArguments}, ${tableCode(languages[defaultLanguage], index)}, { ${loaders.join(', ')} })`,
                         ].join('\n'),
                         moduleType: 'js',
                     };
@@ -133,8 +140,16 @@ export function i18nModules({ runtime = RUNTIME, defaultLanguage = 'en', sharedS
                 const file = specifier.slice(0, separatorIndex);
                 const language = specifier.slice(separatorIndex + LANGUAGE_SEPARATOR.length);
                 this.addWatchFile(file);
+                const messages = readLanguages(file)[language] ?? {};
+                const index = tables?.get(language);
+                if (index) {
+                    return {
+                        code: `import t from ${JSON.stringify(TABLE_SPECIFIER + language)}\nexport default ${tableCode(messages, index)}`,
+                        moduleType: 'js',
+                    };
+                }
                 return {
-                    code: `export default ${JSON.stringify(readLanguages(file)[language] ?? {})}`,
+                    code: `export default ${JSON.stringify(messages)}`,
                     moduleType: 'js',
                 };
             }
@@ -173,6 +188,11 @@ function* leaves(messages) {
         else
             yield* leaves(value);
     }
+}
+/** The messages as code that reads each string from the table `t`. */
+function tableCode(messages, index) {
+    const entries = Object.entries(messages).map(([key, value]) => `${JSON.stringify(key)}:${typeof value === 'string' ? `t[${index.get(value)}]` : tableCode(value, index)}`);
+    return `{${entries.join(',')}}`;
 }
 /** The messages with the index of each string in the shared table. */
 function toIndexes(messages, index) {

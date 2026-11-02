@@ -292,7 +292,7 @@ describe('the build', () => {
 			.map((name) => readFileSync(join(root, 'dist', name), 'utf8'))
 			.join('')
 		expect(output.match(/Save changes/g)).toHaveLength(1)
-		// The most used string gets index 0.
-		expect(output).toMatch(/"?save"?:\s*0/)
+		// The module reads the string from the table: the most used one is 0.
+		expect(output).toMatch(/"?save"?:\s*\w+\[0\]/)
 	})
 })
