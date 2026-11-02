@@ -214,14 +214,14 @@ describe('I18nOverrides', () => {
 		function TypeChecks() {
 			return (
 				<>
-					{/* @ts-expect-error -- the file has no key `missing` */}
 					<I18nOverrides
 						messages={pageMessages}
+						// @ts-expect-error -- the file has no key `missing`
 						strings={{ missing: 'x' }}
 					/>
-					{/* @ts-expect-error -- a string must be a string */}
 					<I18nOverrides
 						messages={pageMessages}
+						// @ts-expect-error -- a string must be a string
 						strings={{ title: 1 }}
 					/>
 				</>
