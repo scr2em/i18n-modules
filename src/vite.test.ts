@@ -272,4 +272,27 @@ describe('the build', () => {
 			}),
 		).rejects.toThrow('string literals only')
 	})
+
+	it('puts each string once in a shared table with `sharedStrings`', async () => {
+		root = mkdtempSync(join(tmpdir(), 'i18n-modules-'))
+		writeFileSync(join(root, 'Page.i18n.ts'), stringsFile({ en: { save: 'Save changes', title: 'Page' } }))
+		writeFileSync(join(root, 'Card.i18n.ts'), stringsFile({ en: { save: 'Save changes', title: 'Card' } }))
+		writeFileSync(join(root, 'runtime.js'), 'export const registerI18nModule = (...args) => args')
+		writeFileSync(join(root, 'Page.js'), "import messages from './Page.i18n.ts'\nconsole.log(messages)")
+		writeFileSync(join(root, 'Card.js'), "import messages from './Card.i18n.ts'\nconsole.log(messages)")
+		writeFileSync(join(root, 'main.js'), "import './Page.js'\nimport './Card.js'")
+		await build({
+			configFile: false,
+			root,
+			logLevel: 'silent',
+			plugins: [i18nModules({ runtime: 'runtime.js', sharedStrings: true })],
+			build: { outDir: 'dist', minify: false, lib: { entry: join(root, 'main.js'), formats: ['es'] } },
+		})
+		const output = readdirSync(join(root, 'dist'))
+			.map((name) => readFileSync(join(root, 'dist', name), 'utf8'))
+			.join('')
+		expect(output.match(/Save changes/g)).toHaveLength(1)
+		// The most used string gets index 0.
+		expect(output).toMatch(/"?save"?:\s*0/)
+	})
 })

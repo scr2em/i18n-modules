@@ -18,4 +18,6 @@ export type Messages = {
 export declare const FILE_SUFFIX = ".i18n.ts";
 /** `./Page.i18n.ts`, or `./Page.i18n` with no extension. */
 export declare function isStringsSpecifier(source: string): boolean;
+/** The `.i18n.ts` files in `folder` and its subfolders. */
+export declare function findStringsFiles(folder: string): string[];
 export declare function readLanguages(file: string): Record<string, Messages>;

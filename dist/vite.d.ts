@@ -33,13 +33,19 @@ import { type Messages } from './strings.ts';
  *   forms (`_one`, `_other`, …) can differ, because languages have different
  *   plural rules.
  */
-export declare function i18nModules({ runtime, defaultLanguage, }?: {
+export declare function i18nModules({ runtime, defaultLanguage, sharedStrings, }?: {
     /** The module that exports `registerI18nModule`, as a path from the
      *  project root. The default is this package's runtime. A path alias
      *  would not work: the generated module is virtual, so it has no folder
      *  to resolve an alias from. */
     runtime?: string;
     defaultLanguage?: string;
+    /**
+     * Experimental, in builds only (like Tailwind): puts the unique strings of
+     * the default language of all files in one shared table, and each strings
+     * module holds indexes into it. Dev stays scoped. Default: false.
+     */
+    sharedStrings?: boolean;
 }): Plugin;
 /** The names of the files that can import `file`, without their extension. */
 export declare function allowedImporters(file: string): string[];

@@ -237,12 +237,20 @@ export function registerI18nModule<const Tree extends Messages>(
 	defaultLanguage: string,
 	defaultMessages: Tree,
 	loaders: Record<string, LanguageLoader>,
+	/** With the `sharedStrings` build, the messages hold indexes into this
+	 *  table of the unique strings of the app, in place of the text. */
+	table?: readonly string[],
 ): I18nMessages<Tree> {
 	const isHotUpdate = modules.has(namespace)
 	modules.set(namespace, {
 		defaultLanguage,
 		loaders: new Map(Object.entries(loaders)),
-		languages: new Map([[defaultLanguage, defaultMessages]]),
+		languages: new Map([
+			[
+				defaultLanguage,
+				table ? fromTable(defaultMessages as never, table) : defaultMessages,
+			],
+		]),
 		loading: new Map(),
 		translators: new Map(),
 	})
@@ -512,6 +520,21 @@ function loadTag(
 		module.loading.set(tag, loading)
 	}
 	return loading
+}
+
+/** Replaces each index with its string from the shared table. */
+function fromTable(
+	indexes: { [key: string]: number | object },
+	table: readonly string[],
+): Messages {
+	const messages: { [key: string]: string | Messages } = {}
+	for (const [key, value] of Object.entries(indexes)) {
+		messages[key] =
+			typeof value === 'number'
+				? table[value]
+				: fromTable(value as { [key: string]: number | object }, table)
+	}
+	return messages
 }
 
 /** Reads the language (of the nearest `I18nProvider`, or else of the app)

@@ -1,4 +1,5 @@
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { parseAst } from 'vite'
 
 /**
@@ -23,6 +24,20 @@ export const FILE_SUFFIX = '.i18n.ts'
 /** `./Page.i18n.ts`, or `./Page.i18n` with no extension. */
 export function isStringsSpecifier(source: string): boolean {
 	return source.endsWith(FILE_SUFFIX) || source.endsWith('.i18n')
+}
+
+/** Folders that never have strings of the app. */
+const SKIPPED_FOLDERS = new Set(['node_modules', '.git', 'dist', 'build'])
+
+/** The `.i18n.ts` files in `folder` and its subfolders. */
+export function findStringsFiles(folder: string): string[] {
+	return readdirSync(folder, { withFileTypes: true }).flatMap((entry) => {
+		const path = join(folder, entry.name)
+		if (entry.isDirectory()) {
+			return SKIPPED_FOLDERS.has(entry.name) ? [] : findStringsFiles(path)
+		}
+		return entry.name.endsWith(FILE_SUFFIX) ? [path] : []
+	})
 }
 
 export function readLanguages(file: string): Record<string, Messages> {

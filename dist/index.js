@@ -122,12 +122,20 @@ export async function setLanguage(requested) {
 }
 /** Called by the code that the Vite plugin makes from a `.i18n.json` file.
  *  Tests can call it to make strings without the plugin. */
-export function registerI18nModule(namespace, defaultLanguage, defaultMessages, loaders) {
+export function registerI18nModule(namespace, defaultLanguage, defaultMessages, loaders, 
+/** With the `sharedStrings` build, the messages hold indexes into this
+ *  table of the unique strings of the app, in place of the text. */
+table) {
     const isHotUpdate = modules.has(namespace);
     modules.set(namespace, {
         defaultLanguage,
         loaders: new Map(Object.entries(loaders)),
-        languages: new Map([[defaultLanguage, defaultMessages]]),
+        languages: new Map([
+            [
+                defaultLanguage,
+                table ? fromTable(defaultMessages, table) : defaultMessages,
+            ],
+        ]),
         loading: new Map(),
         translators: new Map(),
     });
@@ -221,6 +229,17 @@ function loadTag(module, tag, loader) {
         module.loading.set(tag, loading);
     }
     return loading;
+}
+/** Replaces each index with its string from the shared table. */
+function fromTable(indexes, table) {
+    const messages = {};
+    for (const [key, value] of Object.entries(indexes)) {
+        messages[key] =
+            typeof value === 'number'
+                ? table[value]
+                : fromTable(value, table);
+    }
+    return messages;
 }
 /** Reads the language (of the nearest `I18nProvider`, or else of the app)
  *  and the strings of `source`. Suspends while the strings of the language

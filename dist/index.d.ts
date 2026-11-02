@@ -154,7 +154,10 @@ export declare function getLanguage(): string;
 export declare function setLanguage(requested: string): Promise<void>;
 /** Called by the code that the Vite plugin makes from a `.i18n.json` file.
  *  Tests can call it to make strings without the plugin. */
-export declare function registerI18nModule<const Tree extends Messages>(namespace: string, defaultLanguage: string, defaultMessages: Tree, loaders: Record<string, LanguageLoader>): I18nMessages<Tree>;
+export declare function registerI18nModule<const Tree extends Messages>(namespace: string, defaultLanguage: string, defaultMessages: Tree, loaders: Record<string, LanguageLoader>, 
+/** With the `sharedStrings` build, the messages hold indexes into this
+ *  table of the unique strings of the app, in place of the text. */
+table?: readonly string[]): I18nMessages<Tree>;
 /**
  * The type of a `.i18n.json` import, from its `.i18n.d.json.ts` file. `Tree`
  * is the text of the default language. At runtime the import is not the JSON,
