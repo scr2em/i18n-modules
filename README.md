@@ -170,6 +170,67 @@ export function Inbox({ name }: { name: string }) {
 - When a language does not have a key, the less specific language is used,
   then the default language. See [Language tags](#language-tags).
 
+### Typed values in `{{…}}`
+
+`t()` reads the `{{name}}` placeholders from the text of each string. The
+second parameter of `t()` must have one value for each placeholder. The type
+check uses the `en` strings of the file.
+
+`Task.i18n.ts`:
+
+```ts
+import { defineMessages } from '@scr2em/i18n-modules'
+
+export default defineMessages({
+	en: {
+		greeting: 'Hello {{name}}, you have {{count}} tasks',
+		total: 'Total: {{amount, number}}',
+		invite: 'Invite {{ first name }}',
+		saved: 'Saved',
+		files_one: '{{count}} file in {{folder}}',
+		files_other: '{{count}} files in {{folder}}',
+		settings: {
+			title: 'Settings of {{team}}',
+		},
+	},
+})
+```
+
+These calls pass the type check:
+
+```ts
+t('greeting', { name: 'Ada', count: 3 })
+t('total', { amount: 1234.5 }) // the name is `amount`, not `amount, number`
+t('invite', { 'first name': 'Ada' }) // spaces at the ends of the name are removed
+t('saved') // no placeholders, so no values
+t('files', { count: 2, folder: 'Docs' }) // the names of all plural forms
+t('settings.title', { team: 'Design' }) // a nested key
+t('greeting', { name: null, count: 0 }) // null renders as ''
+```
+
+These calls fail the type check:
+
+```ts
+t('greeting') // `name` and `count` are missing
+t('greeting', { name: 'Ada' }) // `count` is missing
+t('greeting', { nme: 'Ada', count: 3 }) // `nme` is not in the text
+t('greeting', { name: 'Ada', count: 3, extra: 1 }) // `extra` is not in the text
+t('greeting', { name: 'Ada', count: '3' }) // `count` must be a number
+t('files', { count: 2 }) // `folder` is missing
+t('saved', { name: 'Ada' }) // `saved` has no placeholders
+t('total', { amount: { value: 1 } }) // a value is a string, a number, null or undefined
+```
+
+- A value can be a string, a number, `null` or `undefined`. A value named
+  `count` must be a number.
+- Your editor autocompletes the names of the values after you type the key.
+- When you change the text, the type check finds each `t()` call that no
+  longer fits. For example, rename `{{name}}` to `{{fullName}}` and every
+  `t('greeting', { name })` fails.
+- A name with a default value is optional. See
+  [Default values](#default-values).
+- `values` of `<Trans>` has the same types.
+
 ### Language tags
 
 The language keys of a strings file are BCP 47 tags with an ISO 639 language:
